@@ -11,7 +11,7 @@ cd livelineAVStack
 git pull  
 julia --project --threads=auto  
 #press ] to enter pkg mode  
-pkg> up VehicleSim  
+pkg> up VehicleSim  # if new fixes have been pushed to VehicleSim, restart Julia
 #press backspace to quit pkg mode  
 using Revise, Sockets, livelineAVStack  
 livelineAVStack.keyboard_client(ip"192.168.56.1")  
