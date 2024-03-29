@@ -3,8 +3,9 @@ cd VehicleSim
 git pull  
 julia --project --threads=auto  
 using VehicleSim  
-server(; no_mesh=true)  
-#server(; no_mesh=true, measure_gt=true, measure_imu=true, measure_cam=true, measure_gps=true)  
+#choose message types which you want the server to send to the client
+server(; no_mesh=true, measure_gt=true, measure_imu=true, measure_cam=true, measure_gps=true)  
+#server(; no_mesh=true, measure_gt=true, measure_cam=true)  
 
 Start a client:  
 Clone this repository into the same directory as VehicleSim  
