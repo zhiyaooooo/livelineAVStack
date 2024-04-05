@@ -1,6 +1,5 @@
 struct MyLocalizationType
     time::Float64
-    vehicle_id::Int
     position::SVector{3, Float64} # position of center of vehicle
     orientation::SVector{4, Float64} # represented as quaternion
     velocity::SVector{3, Float64}
@@ -35,6 +34,23 @@ function is_inside_segment(car_position::SVector{3, Float64}, segment::RoadSegme
     return within_boundaries
 end
 
+function angular_velocity_to_quaternion(angular_velocity, dt)
+    half_dt = 0.5 * dt
+    axis_angle = half_dt * angular_velocity
+    norm_axis_angle = norm(axis_angle)
+    if norm_axis_angle < 1e-12
+        return [1.0, 0.0, 0.0, 0.0] 
+    else
+        unit_axis = axis_angle / norm_axis_angle
+        quat_increment = [cos(norm_axis_angle), 
+                          sin(norm_axis_angle) * unit_axis[1],
+                          sin(norm_axis_angle) * unit_axis[2],
+                          sin(norm_axis_angle) * unit_axis[3]]
+        return quat_increment
+    end
+end
+
+
 function localize(gps_channel, imu_channel, localization_state_channel, map_segments)
     gps_meas = GPSMeasurement(0, 0, 0, 0)
     imu_meas = IMUMeasurement(0, zeroes(3), zeroes(3))
@@ -45,7 +61,7 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
             meas = take!(gps_channel)
             gps_meas = meas
             push!(fresh_gps_meas, meas)
-        endg
+        end
         
         fresh_imu_meas = []
         while isready(imu_channel)
@@ -53,24 +69,32 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
             imu_meas = meas
             push!(fresh_imu_meas, meas)
         end
-        
-        # Calculate time step
-        dt = 0.1
-        quat_increment = angular_velocity_to_quaternion_increment(imu_meas.angular_vel, dt)
-        
-        # Initialize localization state
-        orientation_updated = quaternion_multiply(localization_state.orientation, quat_increment)
+
+        #time
         # TO DO: time currently gives the current time, it should give the time that has passed since the beginning
         time = time()
+        
+        # orientation
+        dt = 0.1
+        quat_increment = angular_velocity_to_quaternion(imu_meas.angular_vel, dt)
+        orientation_updated = quaternion_multiply(localization_state.orientation, quat_increment)
+
         # TO DO: size?
 
-        # find which map segment the car is located in
-        current_segment
+        # Find which map segment the car is located in
+        current_segment = nothing
         for map_segment in values(map_segments)
             if is_inside_segment(gps_meas.position, map_segment)
                 current_segment = map_segment
+                break  # Found the segment, no need to continue searching
+            end
+        end
+        if current_segment === nothing
+            println("Car is not within any map segment.")
+            continue
+        end
 
-        localization_state = MyLocalizationType(time, 0, [gps_meas.lat, gps_meas.long, 0.0], orientation_updated, imu_meas.linear_vel, imu_meas.angular_vel, zeros(3), 0)
+        localization_state = MyLocalizationType(time, [gps_meas.lat, gps_meas.long, 0.0], orientation_updated, imu_meas.linear_vel, imu_meas.angular_vel, zeros(3), current_segment)
 
         if isready(localization_state_channel)
             take!(localization_state_channel)
