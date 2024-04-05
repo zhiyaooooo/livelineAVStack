@@ -5,7 +5,7 @@ struct MyLocalizationType
     velocity::SVector{3, Float64}
     angular_velocity::SVector{3, Float64} # angular velocity around x,y,z axes
     size::SVector{3, Float64} # length, width, height of 3d bounding box centered at (position/orientation)
-    map_segment::Int
+    map_segment::RoadSegment
 end
 
 struct MyPerceptionType
@@ -94,12 +94,13 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
             continue
         end
 
+        # new vals
         localization_state = MyLocalizationType(time, [gps_meas.lat, gps_meas.long, 0.0], orientation_updated, imu_meas.linear_vel, imu_meas.angular_vel, zeros(3), current_segment)
 
+        #putting the new vals in the channel
         if isready(localization_state_channel)
             take!(localization_state_channel)
         end
-        
         put!(localization_state_channel, localization_state)
     end 
 end
