@@ -14,26 +14,68 @@ struct MyPerceptionType
     field2::Float64
 end
 
-function localize(gps_channel, imu_channel, localization_state_channel)
-    # Set up algorithm / initialize variables
+function is_inside_segment(car_position::SVector{3, Float64}, segment::RoadSegment)
+    within_boundaries = true
+    
+    # Check if the car's position is within each lane boundary
+    for boundary in segment.lane_boundaries
+        # Determine if the car's latitude and longitude fall within the boundary
+        within_boundary = (boundary.pt_a[2] <= car_position[2] <= boundary.pt_b[2] ||
+                           boundary.pt_b[2] <= car_position[2] <= boundary.pt_a[2]) &&
+                          (boundary.pt_a[1] <= car_position[1] <= boundary.pt_b[1] ||
+                           boundary.pt_b[1] <= car_position[1] <= boundary.pt_a[1])
+        
+        # If the car is not within any one boundary, it's not within the segment
+        if !within_boundary
+            within_boundaries = false
+            break
+        end
+    end
+    
+    return within_boundaries
+end
+
+function localize(gps_channel, imu_channel, localization_state_channel, map_segments)
+    gps_meas = GPSMeasurement(0, 0, 0, 0)
+    imu_meas = IMUMeasurement(0, zeroes(3), zeroes(3))
+    
     while true
         fresh_gps_meas = []
         while isready(gps_channel)
             meas = take!(gps_channel)
+            gps_meas = meas
             push!(fresh_gps_meas, meas)
-        end
+        endg
+        
         fresh_imu_meas = []
         while isready(imu_channel)
             meas = take!(imu_channel)
+            imu_meas = meas
             push!(fresh_imu_meas, meas)
         end
         
-        # process measurements
+        # Calculate time step
+        dt = 0.1
+        quat_increment = angular_velocity_to_quaternion_increment(imu_meas.angular_vel, dt)
+        
+        # Initialize localization state
+        orientation_updated = quaternion_multiply(localization_state.orientation, quat_increment)
+        # TO DO: time currently gives the current time, it should give the time that has passed since the beginning
+        time = time()
+        # TO DO: size?
 
-        localization_state = MyLocalizationType(0,0.0)
+        # find which map segment the car is located in
+        current_segment
+        for map_segment in values(map_segments)
+            if is_inside_segment(gps_meas.position, map_segment)
+                current_segment = map_segment
+
+        localization_state = MyLocalizationType(time, 0, [gps_meas.lat, gps_meas.long, 0.0], orientation_updated, imu_meas.linear_vel, imu_meas.angular_vel, zeros(3), 0)
+
         if isready(localization_state_channel)
             take!(localization_state_channel)
         end
+        
         put!(localization_state_channel, localization_state)
     end 
 end
@@ -131,7 +173,7 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
         end
     end)
 
-    @async localize(gps_channel, imu_channel, localization_state_channel)
+    @async localize(gps_channel, imu_channel, localization_state_channel, map_segments)
     @async perception(cam_channel, localization_state_channel, perception_state_channel)
     @async decision_making(localization_state_channel, perception_state_channel, map, socket)
 end
