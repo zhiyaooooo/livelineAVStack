@@ -3,7 +3,9 @@ cd VehicleSim
 git pull  
 julia --project --threads=auto  
 using VehicleSim  
-server(; no_mesh=true)  #server(; no_mesh=true, measure_gt=true, imu=true, cam=true, gps=true)
+#choose message types which you want the server to send to the client  
+server(; no_mesh=true, measure_gt=true, measure_imu=true, measure_cam=true, measure_gps=true)  
+#server(3; no_mesh=true, measure_gt=true, measure_cam=true)  
 
 Start a client:  
 Clone this repository into the same directory as VehicleSim  
@@ -14,4 +16,4 @@ julia --project --threads=auto
 pkg> up VehicleSim  # if new fixes have been pushed to VehicleSim, restart Julia
 #press backspace to quit pkg mode  
 using Revise, Sockets, livelineAVStack  
-livelineAVStack.keyboard_client(ip"172.20.10.2")  
+livelineAVStack.keyboard_client(ip"")  #enter your ip
