@@ -26,9 +26,9 @@ function keyboard_client(host::IPAddr=IPv4(0), port=4444; v_step = 1.0, s_step =
         sleep(0.001)
         state_msg = deserialize(socket)
         measurements = state_msg.measurements
-        print("\nmeasurement start #\n")
-        print(measurements)
-        print("\nmeasurement end #\n")
+        print("\nmeasurement start #\n")
+        print(measurements)
+        print("\nmeasurement end #\n")
         num_cam = 0
         num_imu = 0
         num_gps = 0
