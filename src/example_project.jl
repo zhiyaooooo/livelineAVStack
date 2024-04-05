@@ -10,8 +10,13 @@ struct MyLocalizationType
 end
 
 struct MyPerceptionType
-    field1::Int
-    field2::Float64
+    time::Float64
+    vehicle_id::Int
+    position::SVector{3, Float64} # position of center of vehicle
+    orientation::SVector{4, Float64} # represented as quaternion
+    velocity::SVector{3, Float64}
+    steering_angle::Float64
+    size::SVector{3, Float64} # length, width, height of 3d bounding box centered at (position/orientation)
 end
 
 function localize(gps_channel, imu_channel, localization_state_channel)
