@@ -1,4 +1,4 @@
-#Start a server:  
+# Start a server:  
 cd VehicleSim  
 git pull  
 julia --project --threads=auto  
@@ -7,7 +7,7 @@ using VehicleSim
 server(; no_mesh=true, measure_gt=true, measure_imu=true, measure_cam=true, measure_gps=true)  
 #VehicleSim.server(3; no_mesh=true, measure_gt=true, measure_cam=true)  
 
-#Start a client:  
+# Start a client:  
 Clone this repository into the same directory as VehicleSim  
 cd livelineAVStack  
 git pull  
