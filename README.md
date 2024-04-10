@@ -1,14 +1,13 @@
 # Start a server:  
-cd VehicleSim  
+cd livelineAVStack  
 git pull  
 julia --project --threads=auto  
 using VehicleSim  
 #choose message types which you want the server to send to the client  
-server(; no_mesh=true, measure_gt=true, measure_imu=true, measure_cam=true, measure_gps=true)  
+VehicleSim.server(; no_mesh=true, measure_gt=true, measure_imu=true, measure_cam=true, measure_gps=true)  
 #VehicleSim.server(3; no_mesh=true, measure_gt=true, measure_cam=true)  
 
 # Start a client:  
-Clone this repository into the same directory as VehicleSim  
 cd livelineAVStack  
 git pull  
 julia --project --threads=auto  
