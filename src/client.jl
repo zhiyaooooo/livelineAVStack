@@ -115,3 +115,116 @@ function example_client(host::IPAddr=IPv4(0), port=4444)
     end
 
 end
+
+# using Graphs
+
+# function build_road_network(segments::Vector{Tuple{Int, Int, Float64}})
+#     # Create an empty weighted graph. The vertices represent intersections,
+#     # and the edges represent road segments. The weight represents the distance
+#     # or cost of traversing the segment.
+#     g = SimpleWeightedGraph()
+
+#     # Add edges to the graph based on the provided segments
+#     # Each segment is a tuple of (start_vertex, end_vertex, weight)
+#     for segment in segments
+#         start_vertex, end_vertex, weight = segment
+#         if !has_vertex(g, start_vertex)
+#             add_vertex!(g)
+#         end
+#         if !has_vertex(g, end_vertex)
+#             add_vertex!(g)
+#         end
+#         add_edge!(g, start_vertex, end_vertex, weight)
+#     end
+
+#     return g
+# end
+
+# function find_shortest_path(graph, start_id, finish_id)
+#     # Compute shortest paths from start_id using Dijkstra's algorithm
+#     path = dijkstra_shortest_paths(graph, start_id)
+
+#     # Retrieve the shortest path to finish_id
+#     shortest_path = enumerate_paths(path, finish_id)
+
+#     return shortest_path
+# end
+
+# # Example road segments: (start_point, end_point, distance)
+# road_segments = [
+#     (1, 2, 7.0),
+#     (2, 3, 10.0),
+#     (2, 4, 15.0),
+#     (1, 4, 20.0),
+#     (3, 4, 11.0),
+#     (3, 5, 2.0),
+#     (4, 5, 9.0)
+# ]
+
+# # Build the road network graph
+# g = build_road_network(road_segments)
+
+# # Find the shortest path from start to finish
+# start_id = 1
+# finish_id = 5
+# shortest_path = find_shortest_path(g, start_id, finish_id)
+
+# println("Shortest path from $start_id to $finish_id: $shortest_path")
+
+# const RoadNetwork = Dict{Tuple{Int, Int}, RoadSegment}()
+
+# function add_straight_segments!(all_segs, base, direction; length=40.0, ...)
+
+#     start_node = base.id
+#     end_node = seg_id
+#     RoadNetwork[(start_node, end_node)] = seg
+#     all_segs[end_node] = seg
+# end
+
+# using DataStructures
+
+# function dijkstra(graph, start_id, end_id)
+#     dist = Dict{Int, Float64}(start_id => 0)
+#     prev = Dict{Int, Int}()
+#     pq = PriorityQueue()
+#     enqueue!(pq, start_id, 0)
+
+#     while !isempty(pq)
+#         current_id = dequeue!(pq)
+        
+#         if current_id == end_id
+#             break
+#         end
+
+#         for (adj_id, seg) in graph
+#             if adj_id[1] == current_id
+#                 alt = dist[current_id] + seg.distance  
+#                 if alt < get(dist, adj_id[2], Inf)
+#                     dist[adj_id[2]] = alt
+#                     prev[adj_id[2]] = current_id
+#                     enqueue!(pq, adj_id[2], alt)
+#                 end
+#             end
+#         end
+#     end
+
+#     # Reconstruct the path
+#     path = []
+#     u = end_id
+#     while haskey(prev, u)
+#         prepend!(path, u)
+#         u = prev[u]
+#     end
+#     prepend!(path, start_id)
+#     path
+# end
+
+# function navigate_vehicle(socket, start_id, end_id)
+#     path = dijkstra(RoadNetwork, start_id, end_id)
+#     for node in path
+
+#         cmd = calculate_command_for_segment(RoadNetwork[node])
+#         serialize(socket, cmd) 
+#     end
+# end
+
