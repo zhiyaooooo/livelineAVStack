@@ -57,7 +57,7 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
     velocity_estimate = fresh_imu_meas.linear_vel
     angular_velocity_estimate = fresh_imu_meas.angular_vel
     size_estimate = [0, 0, 0]
-    current_segment_estimate = map_segments
+    current_segment_estimate = nothing
 
     state_estimate = MyLocalizationType(time_estimate, position_estimate, orientation_estimate, velocity_estimate, angular_velocity_estimate, size_estimate, current_segment_estimate)
 
@@ -66,16 +66,16 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
         1.0,    # Variance of position_x
         1.0,    # Variance of position_y
         1.0,    # Variance of position_z
-        0.01,   # Variance of orientation_1
-        0.01,   # Variance of orientation_2
-        0.01,   # Variance of orientation_3
-        0.01,   # Variance of orientation_4
+        0.1,   # Variance of orientation_1
+        0.1,   # Variance of orientation_2
+        0.1,   # Variance of orientation_3
+        0.1,   # Variance of orientation_4
         0.001,  # Variance of velocity_x
         0.001,  # Variance of velocity_y
         0.001,  # Variance of velocity_z
-        0.0001, # Variance of angular_velocity_x
-        0.0001, # Variance of angular_velocity_y
-        0.0001, # Variance of angular_velocity_z
+        0.001, # Variance of angular_velocity_x
+        0.001, # Variance of angular_velocity_y
+        0.001, # Variance of angular_velocity_z
         0.0,    # Variance of size_length
         0.0,    # Variance of size_width
         0.0     # Variance of size_height
@@ -112,13 +112,17 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
             state_estimate, covariance_matrix = update_covariance_matrix(predicted_state, fresh_gps_meas, fresh_imu_meas, covariance_matrix)
 
             # TO DO: add the current segment into the state estimate
-            current_segment = nothing
+            cur_segment = nothing
             for map_segment in map_segments
                 if is_inside_segment(fresh_gps_meas.position, map_segment)
-                    current_segment = map_segment
+                    cur_segment = map_segment
                     break
+                end
+            end
             if current_segment === nothing
                 print("Error: car not inside a segment")
+            end
+            state_estimate.current_segment = cur_segment
 
             # add the changes into the localization_state_channel
             localization_state = state_estimate
@@ -165,23 +169,36 @@ function predict_next_state(state_estimate::MyLocalizationType, delta_time::Floa
 end
 
 
-function update_covariance_matrix(state_estimate::MyLocalizationType, gps_measurement::GPSMeasurement, imu_measurement::IMUMeasurement, covariance_matrix::Matrix{Float64})
+function update_covariance_matrix(predicted_state_estimate::MyLocalizationType, gps_measurement::GPSMeasurement, imu_measurement::IMUMeasurement, covariance_matrix::Matrix{Float64})
     """
-    Use the predicted state and the real measurements in order to update the covariance matrix for future calculations
+    Use the predicted state and the real measurements to update the covariance matrix for future calculations
     """
     gps_position = [gps_measurement.lat, gps_measurement.long, 0.0]
     gps_heading = gps_measurement.heading
     imu_linear_vel = imu_measurement.linear_vel
     imu_angular_vel = imu_measurement.angular_vel
 
-    # update the estimated vals with the measurements
-    state_estimate.position = (gps_position + state_estimate.position) / 2
-    state_estimate.orientation = (heading_to_quaternion(gps_heading) + state_estimate.orientation)/2
-    state_estimate.velocity = (imu_linear_vel + state_estimate.velocity)/2
-    state_estimate.angular_velocity = (imu_angular_vel + state_estimate.angular_velocity)/2
+    predicted_gps_position = predicted_state_estimate.position
+    predicted_imu_linear_vel = predicted_state_estimate.velocity
+    predicted_imu_angular_vel = predicted_state_estimate.angular_velocity
 
-    # TO DO: update covariance matrix based on the state_estimate
-    updated_covariance_matrix = covariance_matrix
+    # Measurement covariance
+    # found these vals in the measurements.jl file
+    gps_covariance = Diagonal([1.0, 1.0, 0.01])
+    imu_covariance = Diagonal([0.000001, 0.000001, 0.000001])
+
+    # Calculate Kalman gain
+    kalman_gain_gps = covariance_matrix * inv(covariance_matrix + gps_covariance)
+    kalman_gain_imu = covariance_matrix * inv(covariance_matrix + imu_covariance)
+
+    # Update state estimate
+    state_estimate.position += kalman_gain_gps * (gps_position - predicted_gps_position)
+    state_estimate.orientation += kalman_gain_gps * (heading_to_quaternion(gps_heading) - predicted_state_estimate.orientation)
+    state_estimate.velocity += kalman_gain_imu * (imu_linear_vel - predicted_imu_linear_vel)
+    state_estimate.angular_velocity += kalman_gain_imu * (imu_angular_vel - predicted_imu_angular_vel)
+
+    # Update covariance matrix
+    updated_covariance_matrix = covariance_matrix - kalman_gain_gps * covariance_matrix - kalman_gain_imu * covariance_matrix
 
     return state_estimate, updated_covariance_matrix
 end
@@ -243,7 +260,7 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
     cam_channel = Channel{CameraMeasurement}(32)
     gt_channel = Channel{GroundTruthMeasurement}(32)
 
-    #localization_state_channel = Channel{MyLocalizationType}(1)
+    localization_state_channel = Channel{MyLocalizationType}(1)
     #perception_state_channel = Channel{MyPerceptionType}(1)
 
     target_map_segment = 0 # (not a valid segment, will be overwritten by message)
