@@ -140,3 +140,77 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
     @async perception(cam_channel, localization_state_channel, perception_state_channel)
     @async decision_making(localization_state_channel, perception_state_channel, map, socket)
 end
+
+function build_graph(all_segs)
+    nodes = Set{Int}()
+    edges = Dict{Int, Vector{Int}}()
+    segments = Dict{Int, RoadSegment}()
+
+    for (id, segment) in all_segs
+        push!(nodes, id) 
+        edges[id] = segment.children
+        segments[id] = segment
+    end
+
+    return (nodes, edges, segments)
+end
+
+const CAR_SPEED = 10.0
+
+function calculate_segment_length(segment)
+    pt_a = segment.lane_boundaries[1].pt_a
+    pt_b = segment.lane_boundaries[end].pt_b
+    return sqrt((pt_b[1] - pt_a[1])^2 + (pt_b[2] - pt_a[2])^2)
+end
+
+using DataStructures
+
+function dijkstra(graph, source_id, target_id)
+    distances = Dict{Int, Float64}()
+    previous = Dict{Int, Int}()
+    pq = PriorityQueue()
+
+    for node_id in keys(graph.edges)
+        distances[node_id] = Inf
+        enqueue!(pq, node_id, Inf)
+    end
+    distances[source_id] = 0
+    update!(pq, source_id, 0)
+
+    while !isempty(pq)
+        current_id = dequeue!(pq)
+        if current_id == target_id
+            break
+        end
+
+        for adjacent_id in graph.edges[current_id]
+            edge_weight = calculate_edge_weight(current_id, adjacent_id, graph)
+            alt = distances[current_id] + edge_weight
+            if alt < distances[adjacent_id]
+                distances[adjacent_id] = alt
+                previous[adjacent_id] = current_id
+                update!(pq, adjacent_id, alt)
+            end
+        end
+    end
+    return distances, previous
+end
+
+function calculate_edge_weight(from_id, to_id, graph)
+    segment = graph.segments[from_id]  
+    return calculate_segment_length(segment) / CAR_SPEED
+end
+
+function reconstruct_path(previous, source_id, target_id)
+    path = []
+    current_id = target_id
+    while current_id != source_id
+        push!(path, current_id)
+        current_id = previous[current_id]
+        if isnothing(current_id)
+            return []  
+        end
+    end
+    push!(path, source_id)
+    return reverse(path)
+end
