@@ -5,6 +5,7 @@ struct VehicleCommand
     controlled::Bool
 end
 
+
 function get_c()
     c = 'x'
     try
