@@ -126,14 +126,37 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
 
             # add the changes into the localization_state_channel
             localization_state = state_estimate
+            localization_state = MyLocalizationType(time(), zeroes(3), zeroes(4), zeroes(3), zeroes(3), zeroes(3), nothing)
             if isready(localization_state_channel)
                 take!(localization_state_channel)
             end
             put!(localization_state_channel, localization_state)
+            print(localization_state)
         end
     end 
 end
 
+
+function debug_localization(localization_state_channel)
+    while true
+        # Fetch the latest localization state
+        state = fetch(localization_state_channel)
+        
+        # Print the contents of the localization state
+        println("Localization State:")
+        println("Time: ", state.time)
+        println("Position: ", state.position)
+        println("Orientation: ", state.orientation)
+        println("Velocity: ", state.velocity)
+        println("Angular Velocity: ", state.angular_velocity)
+        println("Size: ", state.size)
+        println("Current Segment: ", state.current_segment)
+        println()  # Add a blank line for better readability
+        
+        # Sleep for a short while to avoid excessive CPU usage
+        sleep(0.1)
+    end
+end
 
 function predict_next_state(state_estimate::MyLocalizationType, delta_time::Float64)
     """
@@ -300,4 +323,5 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
     @async localize(gps_channel, imu_channel, localization_state_channel, map_segments)
     @async perception(cam_channel, localization_state_channel, perception_state_channel)
     @async decision_making(localization_state_channel, perception_state_channel, map, socket)
+    @async debug_localization(localization_state_channel)
 end
