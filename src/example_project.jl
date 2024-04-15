@@ -307,29 +307,38 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
     @async decision_making(localization_state_channel, perception_state_channel, map, socket)
 end
 
+using DataStructures
+
+const CAR_SPEED = 10.0
+
+
+function calculate_segment_length(segment)
+    pt_a = segment.lane_boundaries[1].pt_a
+    pt_b = segment.lane_boundaries[end].pt_b
+    sqrt((pt_b[1] - pt_a[1])^2 + (pt_b[2] - pt_a[2])^2)
+end
+
 function build_graph(all_segs)
     nodes = Set{Int}()
     edges = Dict{Int, Vector{Int}}()
     segments = Dict{Int, RoadSegment}()
+    pullout_zones = Set{Int}()
 
     for (id, segment) in all_segs
         push!(nodes, id) 
         edges[id] = segment.children
         segments[id] = segment
+        if contains_lane_type(segment, LaneTypes.loading_zone)
+            push!(pullout_zones, id)
+        end
     end
 
-    return (nodes, edges, segments)
+    (nodes, edges, segments, pullout_zones)
 end
 
-const CAR_SPEED = 10.0
-
-function calculate_segment_length(segment)
-    pt_a = segment.lane_boundaries[1].pt_a
-    pt_b = segment.lane_boundaries[end].pt_b
-    return sqrt((pt_b[1] - pt_a[1])^2 + (pt_b[2] - pt_a[2])^2)
+function contains_lane_type(segment, lane_type)
+    lane_type in segment.lane_types
 end
-
-using DataStructures
 
 function dijkstra(graph, source_id, target_id)
     distances = Dict{Int, Float64}()
@@ -345,7 +354,7 @@ function dijkstra(graph, source_id, target_id)
 
     while !isempty(pq)
         current_id = dequeue!(pq)
-        if current_id == target_id
+        if current_id == target_id || (current_id in graph.pullout_zones && target_id in graph.pullout_zones)
             break
         end
 
@@ -363,8 +372,8 @@ function dijkstra(graph, source_id, target_id)
 end
 
 function calculate_edge_weight(from_id, to_id, graph)
-    segment = graph.segments[from_id]  
-    return calculate_segment_length(segment) / CAR_SPEED
+    segment = graph.segments[from_id]
+    calculate_segment_length(segment) / CAR_SPEED
 end
 
 function reconstruct_path(previous, source_id, target_id)
@@ -378,5 +387,5 @@ function reconstruct_path(previous, source_id, target_id)
         end
     end
     push!(path, source_id)
-    return reverse(path)
+    reverse(path)
 end
