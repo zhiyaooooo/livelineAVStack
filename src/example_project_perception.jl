@@ -1,3 +1,9 @@
+using StaticArrays
+using Distributions
+using LinearAlgebra
+using Rotations
+using StatsBase
+
 struct MyLocalizationType
     time::Float64
     vehicle_id::Int
