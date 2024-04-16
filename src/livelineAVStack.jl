@@ -11,6 +11,6 @@ using Symbolics
 
 include("client.jl")
 include("example_project.jl")
-include("trajectory_functions.jl")
+# include("trajectory_functions.jl")
 
 end # module livelineAVStack
