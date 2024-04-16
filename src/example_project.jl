@@ -1,391 +1,509 @@
-struct MyLocalizationType
-    time::Float64
-    position::SVector{3, Float64} # position of center of vehicle
-    orientation::SVector{4, Float64} # represented as quaternion
-    velocity::SVector{3, Float64}
-    angular_velocity::SVector{3, Float64} # angular velocity around x,y,z axes
-    size::SVector{3, Float64} # length, width, height of 3d bounding box centered at (position/orientation)
-    current_segment::RoadSegment
+
+function perp_symbolic(x)
+    # @variables x[1:2]  # 如果x未定义为符号变量，则在此定义
+    return [-x[2], x[1]]  # 返回垂直向量
 end
 
-struct MyPerceptionType
-    time::Float64
-    vehicle_id::Int
-    position::SVector{3, Float64} # position of center of vehicle
-    orientation::SVector{4, Float64} # represented as quaternion
-    velocity::SVector{3, Float64}
-    steering_angle::Float64
-    size::SVector{3, Float64} # length, width, height of 3d bounding box centered at (position/orientation)
+function get_tangent_symbolic(pt_a, pt_b)
+    # @variables pt_a[1:2] pt_b[1:2]  # 如果pt_a, pt_b未定义为符号变量，则在此定义
+    tangent = pt_b - pt_a
+    norm_tangent = sqrt(tangent[1]^2 + tangent[2]^2)  # 符号计算向量的范数
+    normalized_tangent = tangent ./ norm_tangent  # 归一化向量
+    return normalized_tangent
 end
 
-using StaticArrays
-
-function heading_to_quaternion(heading::Float64)
-    # Convert heading angle to quaternion representation
-    # Assume rotation around vertical (z) axis
-    # Construct quaternion [cos(θ/2), 0, 0, sin(θ/2)]
-    θ = deg2rad(heading)  # Convert heading angle to radians
-    q = SVector(cos(θ / 2), 0.0, 0.0, sin(θ / 2))
-    return q
+function get_normal_symbolic(tangent)
+    return perp_symbolic(tangent)
 end
 
-function is_inside_segment(car_position::SVector{3, Float64}, segment::RoadSegment)
-    within_boundaries = true
+
+# function signed_distance(segments, point)
+#     println("sd init")
+#     return signed_distance_index(segments, point)[1]
+# end
+
+# function signed_distance_index(segments, point)
+#     println("sd start")
+#     num_segments = length(segments)
+#     sd = zeros(num_segments)
+
+#     # distance for starting ray
+
+#     p_p_vector = point- segments[1].pt1
+#     perp_dis = segments[1].normal'*p_p_vector
+#     if perp_dis == 0
+#         if segments[1].tangent' * p_p_vector >= 0 
+#             sd[1] = norm(p_p_vector)
+#         else
+#             sd[1] = 0
+#         end
+#     else
+#         sign = perp_dis/abs(perp_dis)
+#         if segments[1].tangent' * p_p_vector >= 0 
+#             sd[1] = norm(p_p_vector) * sign
+#         else
+#             sd[1] = perp_dis
+#         end
+#     end
+
+#     # distance for terminal ray
+#     p_p_vector = point - segments[num_segments].pt2
+#     perp_dis = segments[num_segments].normal'*p_p_vector
+#     if perp_dis == 0
+#         if segments[num_segments].tangent' * p_p_vector >= 0 
+#             sd[num_segments] = 0
+#         else
+#             sd[num_segments] = norm(p_p_vector)
+#         end
+#     else
+#         sign = perp_dis/abs(perp_dis)
+#         if segments[num_segments].tangent' * p_p_vector >= 0 
+#             sd[num_segments] = perp_dis
+#         else
+#             sd[num_segments] = norm(p_p_vector) * sign
+#         end
+#     end
+
+#     # distance for normal segments
+#     for i in 2:num_segments-1
+#         p1_p_vector = point - segments[i].pt1
+#         p2_p_vector = point - segments[i].pt2
+#         perp_dis = segments[i].normal'*p1_p_vector
+#         if perp_dis == 0
+#             if segments[i].tangent' * p1_p_vector <= 0 
+#                 sd[i] = norm(p1_p_vector)
+#             elseif segments[i].tangent' * p2_p_vector >= 0 
+#                 sd[i] = norm(p2_p_vector)
+#             else
+#                 sd[i] = 0
+#             end
+#         else
+#             sign = perp_dis/abs(perp_dis)
+#             if segments[i].tangent' * p1_p_vector <= 0
+#                 sd[i] = norm(p1_p_vector) * sign
+#             elseif segments[i].tangent' * p2_p_vector >= 0
+#                 sd[i] = norm(p2_p_vector) * sign
+#             else
+#                 sd[i] = perp_dis
+#             end
+#         end
+#     end
+
+#     min_abs_index = argmin(abs.(sd))
+#     return sd[min_abs_index], min_abs_index
+# end
+
+function signed_distance(pts, point)
+    println("sd start")
+    num_pts = length(pts) - 1
+    @variables sd[1:num_pts]  # 定义符号数组
+
+    for i in 1:num_pts
+        pt1 = pts[i]
+        pt2 = pts[i + 1]
+
+        # 计算切线
+        tangent = pt2 - pt1
+        tangent ./= sqrt(tangent' * tangent)  # 归一化
+
+        # 计算法线
+        normal = [-tangent[2], tangent[1]]  # 2D情况的垂直向量
+
+        # 计算点到线段的距离
+        p_p_vector = point - pt1
+        perp_dis = normal' * p_p_vector
+        tangent_dot = tangent' * p_p_vector
+        norm_p_p_vector = sqrt(p_p_vector' * p_p_vector)  # 向量范数
+
+        sd[i] = ifelse(perp_dis == 0,
+                       ifelse(tangent_dot >= 0, norm_p_p_vector, 0),
+                       ifelse(tangent_dot >= 0, norm_p_p_vector * sign(perp_dis), perp_dis))
+    end
+
+    # 找到最小绝对距离索引
+    pringln("sd finish")
+    min_abs_index = argmin(abs.(sd))
+
+    return sd[min_abs_index], min_abs_index
+end
+
+
+function create_callback_generator(;trajectory_length=10, timestep=0.2, R = Diagonal([0.1, 0.1, 0.1, 0.5]), max_vel=10.0, angles=[0.0, 0.0])
+    println("callback start")
+    X¹, X², X³, size¹, size², size³, pt_la, pt_lb, pt_ra, pt_rb, Z = let
+        @variables(X¹[1:6], X²[1:6], X³[1:6], size¹[1:3], size²[1:3], size³[1:3], pt_la[1:10], pt_lb[1:10], pt_ra[1:10], pt_rb[1:10], Z[1:10*trajectory_length]) .|> Symbolics.scalarize
+    end
+    states, controls = decompose_trajectory(Z)
+    all_states = [[X¹,]; states]
+
+    cost_val = sum(stage_cost(x, u, R, pt_la, pt_lb, pt_ra, pt_rb) for (x,u) in zip(states, controls))
+    cost_grad = Symbolics.gradient(cost_val, Z)
+    constraints_val = Symbolics.Num[]
+    constraints_lb = Float64[]
+    constraints_ub = Float64[]
+    for k in 1:trajectory_length
+        # println(k)
+        vehicle_2_prediction = constant_velocity_prediction(X², size²[1], angles[1], trajectory_length, timestep)
+        vehicle_3_prediction = constant_velocity_prediction(X³, size²[1], angles[2], trajectory_length, timestep)
+        append!(constraints_val, all_states[k+1] .- evolve_state(all_states[k], controls[k], timestep))
+        append!(constraints_lb, zeros(6))
+        append!(constraints_ub, zeros(6))
+        append!(constraints_val, lane_constraint(states[k], size¹, pt_la, pt_lb, 0))
+        append!(constraints_val, lane_constraint(states[k], size¹, pt_ra, pt_rb, 1))
+        append!(constraints_lb, zeros(2))
+        append!(constraints_ub, fill(Inf, 2))
+        append!(constraints_val, collision_constraint(states[k], vehicle_2_prediction, size¹, size²))
+        append!(constraints_val, collision_constraint(states[k], vehicle_3_prediction, size¹, size³))
+        append!(constraints_lb, zeros(2))
+        append!(constraints_ub, fill(Inf, 2))
+        append!(constraints_val, sqrt(states[k][3]^2 + states[k][4]^2))
+        append!(constraints_lb, 0.0)
+        append!(constraints_ub, max_vel)
+        append!(constraints_val, states[k][6])
+        append!(constraints_lb, -pi/4)
+        append!(constraints_ub, pi/4)
+    end
+    println("constraints add")
+
+    constraints_jac = Symbolics.sparsejacobian(constraints_val, Z)
+    (jac_rows, jac_cols, jac_vals) = findnz(constraints_jac)
+    num_constraints = length(constraints_val)
+    println("before expression1")
+    λ, cost_scaling = let
+        @variables(λ[1:num_constraints], cost_scaling) .|> Symbolics.scalarize
+    end
+    lag = (cost_scaling * cost_val + λ' * constraints_val)
+    lag_grad = Symbolics.gradient(lag, Z)
+    try 
+    lag_hess = Symbolics.sparsejacobian(lag_grad, Z)
+    catch e
+        println(e)
+    end
+    println("before expression2")
+    (hess_rows, hess_cols, hess_vals) = findnz(lag_hess)
+    println("before expression3")
     
-    # Check if the car's position is within each lane boundary
-    for boundary in segment.lane_boundaries
-        # Determine if the car's latitude and longitude fall within the boundary
-        within_boundary = (boundary.pt_a[2] <= car_position[2] <= boundary.pt_b[2] ||
-                           boundary.pt_b[2] <= car_position[2] <= boundary.pt_a[2]) &&
-                          (boundary.pt_a[1] <= car_position[1] <= boundary.pt_b[1] ||
-                           boundary.pt_b[1] <= car_position[1] <= boundary.pt_a[1])
-        
-        # If the car is not within any one boundary, it's not within the segment
-        if !within_boundary
-            within_boundaries = false
-            break
-        end
+    expression = Val{false}
+
+    full_cost_fn = let
+        cost_fn = Symbolics.build_function(cost_val, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb]; expression)
+        (Z, X¹, X², X³, size¹, size², size³, pt_la, pt_lb, pt_ra, pt_rb) -> cost_fn([Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb])
+    end
+
+    full_cost_grad_fn = let
+        cost_grad_fn! = Symbolics.build_function(cost_grad, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb]; expression)[2]
+        (grad, Z, X¹, X², X³, size¹, size², size³, pt_la, pt_lb, pt_ra, pt_rb) -> cost_grad_fn!(grad, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb])
+    end
+
+    full_constraint_fn = let
+        constraint_fn! = Symbolics.build_function(constraints_val, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb]; expression)[2]
+        (cons, Z, X¹, X², X³, size¹, size², size³, pt_la, pt_lb, pt_ra, pt_rb) -> constraint_fn!(cons, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb])
+    end
+
+    full_constraint_jac_vals_fn = let
+        constraint_jac_vals_fn! = Symbolics.build_function(jac_vals, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb]; expression)[2]
+        (vals, Z, X¹, X², X³, size¹, size², size³, pt_la, pt_lb, pt_ra, pt_rb) -> constraint_jac_vals_fn!(vals, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb])
     end
     
-    return within_boundaries
+    full_hess_vals_fn = let
+        hess_vals_fn! = Symbolics.build_function(hess_vals, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb; λ; cost_scaling]; expression)[2]
+        (vals, Z, X¹, X², X³, size¹, size², size³, pt_la, pt_lb, pt_ra, pt_rb, λ, cost_scaling) -> hess_vals_fn!(vals, [Z; X¹; X²; X³; size¹; size²; size³; pt_la; pt_lb; pt_ra; pt_rb; λ; cost_scaling])
+    end
+
+    full_constraint_jac_triplet = (; jac_rows, jac_cols, full_constraint_jac_vals_fn)
+    full_lag_hess_triplet = (; hess_rows, hess_cols, full_hess_vals_fn)
+    println("call_back finish")
+
+    return (; full_cost_fn, 
+            full_cost_grad_fn, 
+            full_constraint_fn, 
+            full_constraint_jac_triplet, 
+            full_lag_hess_triplet,
+            constraints_lb,
+            constraints_ub)
 end
 
-function localize(gps_channel, imu_channel, localization_state_channel, map_segments)
-    # Set up algorithm / initialize variables
-    current_time = time()
-    previous_time = current_time
-    time_step = 0.1 # 10 hertz
+"""
+Predict a dummy trajectory for other vehicles.
+"""
+function constant_velocity_prediction(X0, L, steering_angle, trajectory_length, timestep)
+    # println("predict start")
+    X = X0
+    X = evolve_state(X, [0; 0; 0; wheel_angle_to_angular_velocity(X[3:5], steering_angle, L)], timestep)
+    # println("predict finish")
+    X
+end
 
-    time_estimate = time()
-    position_estimate = [fresh_gps_meas.lat, fresh_gps_meas.long, 0]
-    orientation_estimate = Quaternion{Float64}(heading_to_quaternion(fresh_gps_meas.heading))
-    velocity_estimate = fresh_imu_meas.linear_vel
-    angular_velocity_estimate = fresh_imu_meas.angular_vel
-    size_estimate = [0, 0, 0]
-    current_segment_estimate = nothing
+"""
+The physics model used for motion planning purposes.
+Returns X[k] when inputs are X[k-1] and U[k]. 
+Uses a slightly different vehicle model than presented in class for technical reasons.
+"""
+function evolve_state(X, U, Δ)
+    # println("evolve start")
+    V1 = X[3] + Δ * U[1] 
+    V2 = X[4] + Δ * U[2] 
+    V3 = X[5] + Δ * U[3] 
+    θ = X[6] + Δ * U[4]
+    X1 = X[1] + Δ * V1
+    X2 = X[2] + Δ * V2
+    # println("evolve finish")
+    return [X1; X2; V1; V2; V3; θ]
+end
 
-    state_estimate = MyLocalizationType(time_estimate, position_estimate, orientation_estimate, velocity_estimate, angular_velocity_estimate, size_estimate, current_segment_estimate)
+# function lane_constraint(X, size, pt_a, pt_b, flag)
+#     println("lane start")
+#     # 计算车辆的四个角的位置
+#     corners = get_vehicle_corners(X, size)
+    
+#     # 最小距离初始化为一个较大的正值，我们将寻找最小的超过边界的距离
+#     max_overbound_dist = 0
 
-    covariance_matrix = Diagonal([
-        0.01,   # Variance of time
-        1.0,    # Variance of position_x
-        1.0,    # Variance of position_y
-        1.0,    # Variance of position_z
-        0.1,   # Variance of orientation_1
-        0.1,   # Variance of orientation_2
-        0.1,   # Variance of orientation_3
-        0.1,   # Variance of orientation_4
-        0.001,  # Variance of velocity_x
-        0.001,  # Variance of velocity_y
-        0.001,  # Variance of velocity_z
-        0.001, # Variance of angular_velocity_x
-        0.001, # Variance of angular_velocity_y
-        0.001, # Variance of angular_velocity_z
-        0.0,    # Variance of size_length
-        0.0,    # Variance of size_width
-        0.0     # Variance of size_height
-    ])
+#     # 遍历所有线段
+#     for i in 1:length(pt_a)
+#         # 获取线段的切线和法线
+#         tangent = get_tangent_symbolic(pt_a[i], pt_b[i])
+#         normal = get_normal_symbolic(tangent)
 
-    while true
-        # update the current time
-        current_time = time()
-        dt = current_time - previous_time
+#         # 根据 flag 确定使用哪边的法线
+#         if flag == 1  # 右车道
+#             normal = -normal  # 反转法线方向
+#         end
 
-        if dt >= time_step
-            # update the previous time for the next iteration
-            previous_time = current_time
-
-            fresh_gps_meas = []
-            while isready(gps_channel)
-                meas = take!(gps_channel)
-                push!(fresh_gps_meas, meas)
-            end
-            fresh_imu_meas = []
-            while isready(imu_channel)
-                meas = take!(imu_channel)
-                push!(fresh_imu_meas, meas)
-            end
+#         # 检查每个角是否越界
+#         for corner in corners
+#             # 计算点到直线（定义为通过 pt_a[i] 和具有方向 normal 的线）的距离
+#             distance = dot(corner - pt_a[i], normal)
             
-            # process measurements
+#             # 如果距离大于0，说明角越过了边界
+#             if distance > 0
+#                 max_overbound_dist = max(max_overbound_dist, distance)
+#             end
+#         end
+#     end
+#     println("lane finish")
+#     # 如果没有越界，返回 0，否则返回最大越界距离
+#     return -max_overbound_dist
+# end
 
-            # prediction step
-            # predict the next state of the system based on the known dynamics of the vehicle. 
-            predicted_state = predict_next_state(state_estimate, dt)
+# function get_vehicle_corners(X, size)
+#     # X 是车辆中心的位置
+#     # size 是车辆的长宽高，格式为 [length, width, height]
+#     println("corner start")
+#     half_length = size[1] / 2
+#     half_width = size[2] / 2
 
-            # update the covariance matrix
-            # fuse the gps and imu measurements with the predicted state to obtain a more accurate estimate of the current state
-            state_estimate, covariance_matrix = update_covariance_matrix(predicted_state, fresh_gps_meas, fresh_imu_meas, covariance_matrix)
+#     # 假设车辆局部坐标系中，车辆朝向为 X 的第三个分量
+#     theta = X[6]  # 假设 X[3] 是车辆朝向
+#     cos_theta = cos(theta)
+#     sin_theta = sin(theta)
 
-            # TO DO: add the current segment into the state estimate
-            cur_segment = nothing
-            for map_segment in map_segments
-                if is_inside_segment(fresh_gps_meas.position, map_segment)
-                    cur_segment = map_segment
-                    break
-                end
-            end
-            if current_segment === nothing
-                print("Error: car not inside a segment")
-            end
-            state_estimate.current_segment = cur_segment
+#     # 计算四个角的全局坐标
+#     corners = [
+#         X[1:2] + [ cos_theta * half_length - sin_theta * half_width, sin_theta * half_length + cos_theta * half_width],
+#         X[1:2] + [ cos_theta * half_length + sin_theta * half_width, sin_theta * half_length - cos_theta * half_width],
+#         X[1:2] + [-cos_theta * half_length - sin_theta * half_width, -sin_theta * half_length + cos_theta * half_width],
+#         X[1:2] + [-cos_theta * half_length + sin_theta * half_width, -sin_theta * half_length - cos_theta * half_width]
+#     ]
+#     println("corner finish")
+#     return corners
+# end
 
-            # add the changes into the localization_state_channel
-            localization_state = state_estimate
-            if isready(localization_state_channel)
-                take!(localization_state_channel)
-            end
-            put!(localization_state_channel, localization_state)
-        end
-    end 
+
+# 假设 X 是符号变量的位置和方向数组，size 是车辆尺寸的符号变量数组
+function get_vehicle_corners(X, size)
+    # println("corner start")
+    corners = []
+    half_length = size[1] / 2
+    half_width = size[2] / 2
+    theta = X[6]
+    cos_theta = cos(theta)
+    sin_theta = sin(theta)
+    # println("corner start")
+
+    # 计算四个角的全局坐标，确保使用 @SVector 正确格式
+    # corners = [
+    #     @SVector [X[1] + cos_theta * half_length - sin_theta * half_width, X[2] + sin_theta * half_length + cos_theta * half_width],
+    #     @SVector [X[1] + cos_theta * half_length + sin_theta * half_width, X[2] + sin_theta * half_length - cos_theta * half_width],
+    #     @SVector [X[1] - cos_theta * half_length - sin_theta * half_width, X[2] - sin_theta * half_length + cos_theta * half_width],
+    #     @SVector [X[1] - cos_theta * half_length + sin_theta * half_width, X[2] - sin_theta * half_length - cos_theta * half_width]
+    # ]
+    push!(corners, [X[1] + cos_theta * half_length - sin_theta * half_width, X[2] + sin_theta * half_length + cos_theta * half_width])
+    push!(corners, [X[1] + cos_theta * half_length + sin_theta * half_width, X[2] + sin_theta * half_length - cos_theta * half_width])
+    push!(corners, [X[1] - cos_theta * half_length - sin_theta * half_width, X[2] - sin_theta * half_length + cos_theta * half_width])
+    push!(corners, [X[1] - cos_theta * half_length + sin_theta * half_width, X[2] - sin_theta * half_length - cos_theta * half_width])
+    # println("corner finish")
+    return corners
 end
 
 
-function predict_next_state(state_estimate::MyLocalizationType, delta_time::Float64)
-    """
-    Given the current state information, use velocity info to predict the future state of the car
-    """
-    # Extract relevant information from the state estimate
-    position = state_estimate.position
-    orientation = state_estimate.orientation
-    velocity = state_estimate.velocity
-    angular_velocity = state_estimate.angular_velocity
-
-    # TO DO: not sure if this is properly accounting for angular velocity
-
-    # Update orientation based on angular velocity
-    q_angular_velocity = Quaternion{Float64}([0.0, angular_velocity...])
-    quaternion_multiply!(orientation, q_angular_velocity, orientation)
-    normalize!(orientation)
-
-    # Update position based on velocity and orientation
-    R = quaternion_to_rotation_matrix(orientation)
-    position += delta_time * (R * velocity)
-
-    predicted_state = MyLocalizationType(
-        state_estimate.time + delta_time,
-        position,
-        orientation,
-        velocity,
-        angular_velocity,
-        state_estimate.size,
-        state_estimate.current_segment
-    )
-    return predicted_state
+# 计算点到直线的距离，直线由两点定义，法线指向右边
+function point_to_line_distance(point, a, b)
+    # 计算线段的法线方向
+    tangent = get_tangent_symbolic(a, b)
+    normal = get_normal_symbolic(tangent)  # 归一化
+    # println("distance start")
+    # 计算点到直线的距离
+    distance = dot(point - a, normal)
+    # println("distance finish")
+    return distance
 end
 
+# 判断车辆是否在车道内
+function lane_constraint(X, size, pt_a, pt_b, flag)
+    # println("lane start")
+    corners = get_vehicle_corners(X, size)
+    num_pts = length(pt_a)
+    min_distance = 0
 
-function update_covariance_matrix(predicted_state_estimate::MyLocalizationType, gps_measurement::GPSMeasurement, imu_measurement::IMUMeasurement, covariance_matrix::Matrix{Float64})
-    """
-    Use the predicted state and the real measurements to update the covariance matrix for future calculations
-    """
-    gps_position = [gps_measurement.lat, gps_measurement.long, 0.0]
-    gps_heading = gps_measurement.heading
-    imu_linear_vel = imu_measurement.linear_vel
-    imu_angular_vel = imu_measurement.angular_vel
-
-    predicted_gps_position = predicted_state_estimate.position
-    predicted_imu_linear_vel = predicted_state_estimate.velocity
-    predicted_imu_angular_vel = predicted_state_estimate.angular_velocity
-
-    # Measurement covariance
-    # found these vals in the measurements.jl file
-    gps_covariance = Diagonal([1.0, 1.0, 0.01])
-    imu_covariance = Diagonal([0.000001, 0.000001, 0.000001])
-
-    # Calculate Kalman gain
-    kalman_gain_gps = covariance_matrix * inv(covariance_matrix + gps_covariance)
-    kalman_gain_imu = covariance_matrix * inv(covariance_matrix + imu_covariance)
-
-    # Update state estimate
-    state_estimate.position += kalman_gain_gps * (gps_position - predicted_gps_position)
-    state_estimate.orientation += kalman_gain_gps * (heading_to_quaternion(gps_heading) - predicted_state_estimate.orientation)
-    state_estimate.velocity += kalman_gain_imu * (imu_linear_vel - predicted_imu_linear_vel)
-    state_estimate.angular_velocity += kalman_gain_imu * (imu_angular_vel - predicted_imu_angular_vel)
-
-    # Update covariance matrix
-    updated_covariance_matrix = covariance_matrix - kalman_gain_gps * covariance_matrix - kalman_gain_imu * covariance_matrix
-
-    return state_estimate, updated_covariance_matrix
-end
-
-
-function perception(cam_meas_channel, localization_state_channel, perception_state_channel)
-    # set up stuff
-    while true
-        fresh_cam_meas = []
-        while isready(cam_meas_channel)
-            meas = take!(cam_meas_channel)
-            push!(fresh_cam_meas, meas)
+    for i in 1:num_pts-1
+        a1 = pt_a[i]
+        b1 = pt_b[i]
+        a2 = pt_a[i+1]
+        b2 = pt_b[i+1]
+        pt1 = [a1, b1]
+        pt2 = [a2, b2]
+        # println("before dist")
+        # 检查每个角
+        for corner in corners
+            dist = point_to_line_distance(corner, pt1, pt2)
+            # 如果是右车道边界，法线反向
+            dist *= (flag == 1 ? -1 : 1)
+            # if dist > 0  # 如果有任何一个角越界
+            #     return -abs(dist)  # 返回负的最大越界距离
+            # end
+            min_distance = min(min_distance, -dist)
         end
-
-        latest_localization_state = fetch(localization_state_channel)
-        
-        # process bounding boxes / run ekf / do what you think is good
-
-        perception_state = MyPerceptionType(0,0.0)
-        if isready(perception_state_channel)
-            take!(perception_state_channel)
-        end
-        put!(perception_state_channel, perception_state)
     end
+    # println("lane finish")
+    return min_distance  # 如果所有角都在车道内
 end
 
-function decision_making(localization_state_channel, 
-        perception_state_channel, 
-        map, 
-        target_road_segment_id, 
-        socket)
-    # do some setup
-    while true
-        latest_localization_state = fetch(localization_state_channel)
-        latest_perception_state = fetch(perception_state_channel)
-
-        # figure out what to do ... setup motion planning problem etc
-        steering_angle = 0.0
-        target_vel = 0.0
-        cmd = (steering_angle, target_vel, true)
-        serialize(socket, cmd)
-    end
-end
-
-function isfull(ch::Channel)
-    length(ch.data) ≥ ch.sz_max
-end
-
-
-function my_client(host::IPAddr=IPv4(0), port=4444)
-    socket = Sockets.connect(host, port)
-    map_segments = VehicleSim.city_map()
+function collision_constraint(X1, X2, size1, size2)
+    # println("collision start")
+    # 安全缓冲距离
+    buffer = 0.2
     
-    msg = deserialize(socket) # Visualization info
-    @info msg
-
-    gps_channel = Channel{GPSMeasurement}(32)
-    imu_channel = Channel{IMUMeasurement}(32)
-    cam_channel = Channel{CameraMeasurement}(32)
-    gt_channel = Channel{GroundTruthMeasurement}(32)
-
-    localization_state_channel = Channel{MyLocalizationType}(1)
-    #perception_state_channel = Channel{MyPerceptionType}(1)
-
-    target_map_segment = 0 # (not a valid segment, will be overwritten by message)
-    ego_vehicle_id = 0 # (not a valid id, will be overwritten by message. This is used for discerning ground-truth messages)
-
-    errormonitor(@async while true
-        # This while loop reads to the end of the socket stream (makes sure you
-        # are looking at the latest messages)
-        sleep(0.001)
-        local measurement_msg
-        received = false
-        while true
-            @async eof(socket)
-            if bytesavailable(socket) > 0
-                measurement_msg = deserialize(socket)
-                received = true
-            else
-                break
-            end
-        end
-        !received && continue
-        target_map_segment = measurement_msg.target_segment
-        ego_vehicle_id = measurement_msg.vehicle_id
-        for meas in measurement_msg.measurements
-            if meas isa GPSMeasurement
-                !isfull(gps_channel) && put!(gps_channel, meas)
-            elseif meas isa IMUMeasurement
-                !isfull(imu_channel) && put!(imu_channel, meas)
-            elseif meas isa CameraMeasurement
-                !isfull(cam_channel) && put!(cam_channel, meas)
-            elseif meas isa GroundTruthMeasurement
-                !isfull(gt_channel) && put!(gt_channel, meas)
-            end
-        end
-    end)
-
-    @async localize(gps_channel, imu_channel, localization_state_channel, map_segments)
-    @async perception(cam_channel, localization_state_channel, perception_state_channel)
-    @async decision_making(localization_state_channel, perception_state_channel, map, socket)
+    # 计算两个长方体的对角线的一半作为碰撞检测的半径
+    radius1 = sqrt((size1[1]/2)^2 + (size1[2]/2)^2)
+    radius2 = sqrt((size2[1]/2)^2 + (size2[2]/2)^2)
+    
+    # 计算两个车辆中心点之间的距离的平方
+    distance_squared = (X1[1:2] - X2[1:2])' * (X1[1:2] - X2[1:2])
+    
+    # 计算碰撞约束条件，确保两车之间至少保持足够的间距
+    collision_constraint_value = distance_squared - (radius1 + radius2 + buffer)^2
+    # println("collision finish")
+    return collision_constraint_value
 end
 
-using DataStructures
 
-const CAR_SPEED = 10.0
+"""
+Cost at each stage of the plan
+"""
+# function stage_cost(X, U, R, pt_la, pt_lb, pt_ra, pt_rb)
+#     println("cost start")
+#     # 计算速度的模长，鼓励高速可以使用负的系数，这里假设为负以鼓励高速
+#     speed_cost = -0.1 * norm(X[4:6])
+#     # println("speed finish")
+    
+#     # 控制成本，反映控制力度
+#     control_cost = U' * R * U
+#     # println("control finish")
+
+#     # # 路线偏离成本，距离越远成本越高
+#     # segments = Vector{MySegment}(undef, 10)  # 预分配长度为10的向量
+
+#     # 遍历每一对端点，计算中心线段
+#     mid_points = Vector{SizedVector{2, Real}}(undef, 10)
+
+#     for i in 1:10
+#         # 计算中点
+#         mid_pt_a = (pt_la[i] + pt_ra[i]) / 2
+#         mid_pt_b = (pt_lb[i] + pt_rb[i]) / 2
+#         # println("haha")
+    
+#         # 将计算得到的中点添加到数组中
+#         mid_points[i] = (mid_pt_a, mid_pt_b)
+#         # println("Mid points stored")
+#     end
+#     sd, index = signed_distance(mid_points, [X[1], X[2]])
+#     println("get success")
+#     deviation_cost = 0.5 * sd^2
+    
+#     # 总成本为各部分的和
+#     cost = speed_cost + control_cost + deviation_cost
+#     println("cost finish")
+#     return cost
+# end
 
 
-function calculate_segment_length(segment)
-    pt_a = segment.lane_boundaries[1].pt_a
-    pt_b = segment.lane_boundaries[end].pt_b
-    sqrt((pt_b[1] - pt_a[1])^2 + (pt_b[2] - pt_a[2])^2)
+function stage_cost(X, U, R, pt_la, pt_ra, pt_lb, pt_rb)
+    # println("cost start")
+    
+    # 计算速度的模长，使用负的系数鼓励高速
+    speed_cost = -0.1 * sqrt(X[4]^2 + X[5]^2 + X[6]^2)
+    # println("speed finish")
+    
+    # 控制成本，反映控制力度
+    control_cost = U' * R * U
+    # println("control finish")
+
+    # 使用向量存储中点
+    # mid_points = Vector{SVector{2, Real}}(undef, 10)
+
+    # for i in 1:10
+    #     # 计算中点，这里使用符号向量
+    #     mid_pt_a = @SVector [(pt_la[i] + pt_ra[i]) / 2, (pt_lb[i] + pt_rb[i]) / 2]
+    #     mid_points[i] = mid_pt_a
+    #     # println("Mid points stored")
+    # end
+
+    # # 使用新的距离计算方式
+    # sd, index = signed_distance_symbolic(mid_points, @SVector [X[1], X[2]])
+    # println("get success")
+    # deviation_cost = 0.5 * sd^2
+    
+    # 总成本为各部分的和
+    cost = speed_cost + control_cost 
+    # println("cost finish")
+    return cost
 end
 
-function build_graph(all_segs)
-    nodes = Set{Int}()
-    edges = Dict{Int, Vector{Int}}()
-    segments = Dict{Int, RoadSegment}()
-    pullout_zones = Set{Int}()
+# function signed_distance_symbolic(mid_points, point)
+#     num_pts = length(mid_points)
+#     sd = @variables sd[1:num_pts][1]  # 定义符号数组
+    
+#     for i in 1:num_pts
+#         # 简单的欧氏距离计算，适用于符号向量
+#         distance = sqrt((mid_points[i][1] - point[1])^2 + (mid_points[i][2] - point[2])^2)
+#         sd[i] = distance
+#     end
 
-    for (id, segment) in all_segs
-        push!(nodes, id) 
-        edges[id] = segment.children
-        segments[id] = segment
-        if contains_lane_type(segment, LaneTypes.loading_zone)
-            push!(pullout_zones, id)
-        end
-    end
+#     # 找到最小绝对距离索引
+#     min_abs_index = argmin([@eval abs(sd[$i]) for i in 1:num_pts])
+#     return sd[min_abs_index], min_abs_index
+# end
 
-    (nodes, edges, segments, pullout_zones)
+
+"""
+Assume z = [U[1];...;U[K];X[1];...;X[K]]
+Return states = [X[1], X[2],..., X[K]], controls = [U[1],...,U[K]]
+where K = trajectory_length
+"""
+function decompose_trajectory(z)
+    println("decompose start")
+    K = Int(length(z) / 10)  # 因为每组包含4个控制元素和6个状态元素，总共是10个元素
+    controls = [@view(z[(k-1)*4+1:k*4]) for k = 1:K]  # 每个控制向量有4个元素
+    states = [@view(z[4K+(k-1)*6+1:4K+k*6]) for k = 1:K]  # 每个状态向量有6个元素
+    println("decompose finish")
+    return states, controls
 end
 
-function contains_lane_type(segment, lane_type)
-    lane_type in segment.lane_types
+function compose_trajectory(states, controls)
+    K = length(states)
+    z = [reduce(vcat, controls); reduce(vcat, states)]
 end
 
-function dijkstra(graph, source_id, target_id)
-    distances = Dict{Int, Float64}()
-    previous = Dict{Int, Int}()
-    pq = PriorityQueue()
 
-    for node_id in keys(graph.edges)
-        distances[node_id] = Inf
-        enqueue!(pq, node_id, Inf)
-    end
-    distances[source_id] = 0
-    update!(pq, source_id, 0)
 
-    while !isempty(pq)
-        current_id = dequeue!(pq)
-        if current_id == target_id || (current_id in graph.pullout_zones && target_id in graph.pullout_zones)
-            break
-        end
-
-        for adjacent_id in graph.edges[current_id]
-            edge_weight = calculate_edge_weight(current_id, adjacent_id, graph)
-            alt = distances[current_id] + edge_weight
-            if alt < distances[adjacent_id]
-                distances[adjacent_id] = alt
-                previous[adjacent_id] = current_id
-                update!(pq, adjacent_id, alt)
-            end
-        end
-    end
-    return distances, previous
-end
-
-function calculate_edge_weight(from_id, to_id, graph)
-    segment = graph.segments[from_id]
-    calculate_segment_length(segment) / CAR_SPEED
-end
-
-function reconstruct_path(previous, source_id, target_id)
-    path = []
-    current_id = target_id
-    while current_id != source_id
-        push!(path, current_id)
-        current_id = previous[current_id]
-        if isnothing(current_id)
-            return []  
-        end
-    end
-    push!(path, source_id)
-    reverse(path)
-end
