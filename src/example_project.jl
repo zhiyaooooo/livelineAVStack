@@ -4,7 +4,6 @@ struct MyLocalizationType
     orientation::SVector{4, Float64} # represented as quaternion
     velocity::SVector{3, Float64}
     angular_velocity::SVector{3, Float64} # angular velocity around x,y,z axes
-    size::SVector{3, Float64} # length, width, height of 3d bounding box centered at (position/orientation)
     current_segment::RoadSegment
 end
 
@@ -58,7 +57,6 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
     angular_velocity_estimate = fresh_imu_meas.angular_vel
     size_estimate = [0, 0, 0]
     current_segment_estimate = nothing
-
     state_estimate = MyLocalizationType(time_estimate, position_estimate, orientation_estimate, velocity_estimate, angular_velocity_estimate, size_estimate, current_segment_estimate)
 
     covariance_matrix = Diagonal([
@@ -126,12 +124,10 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
 
             # add the changes into the localization_state_channel
             localization_state = state_estimate
-            localization_state = MyLocalizationType(time(), zeroes(3), zeroes(4), zeroes(3), zeroes(3), zeroes(3), nothing)
             if isready(localization_state_channel)
                 take!(localization_state_channel)
             end
             put!(localization_state_channel, localization_state)
-            print(localization_state)
         end
     end 
 end
@@ -323,5 +319,4 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
     @async localize(gps_channel, imu_channel, localization_state_channel, map_segments)
     @async perception(cam_channel, localization_state_channel, perception_state_channel)
     @async decision_making(localization_state_channel, perception_state_channel, map, socket)
-    @async debug_localization(localization_state_channel)
 end
