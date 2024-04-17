@@ -745,7 +745,7 @@ println("motion start")
 while true
     sleep(0.2)
     latest_localization_state = fetch(gt_channel)
-    # println("gt")
+    println("gt")
     # println(latest_localization_state)
     # latest_perception_state = fetch(perception_state_channel)
     latest_perception_state = []
@@ -768,12 +768,12 @@ while true
     target_segment_id = target_segment.id
     println("target_segment")
     println(target_segment_id)
-    # segments = get_route(map, start_segment_id, target_segment_id)
-    # println(segments)
-    segments = []
-    push!(segments, map[32])
-    push!(segments, map[30])
-    push!(segments, map[28])
+    segments = get_route(map, current_segment[1].id, target_segment_id)
+    println(segments)
+    # segments = []
+    # push!(segments, map[32])
+    # push!(segments, map[30])
+    # push!(segments, map[28])
     # # println(segments)
     # if length(latest_perception_state)==0
     #     v2 = MyPerceptionType(
@@ -902,6 +902,169 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
 end
 
 
+# # Calculates the length of a segment based on lane boundaries
+# function calculate_segment_length(segment)
+#     pt_a = segment.lane_boundaries[1].pt_a
+#     pt_b = segment.lane_boundaries[end].pt_b
+#     sqrt((pt_b[1] - pt_a[1])^2 + (pt_b[2] - pt_a[2])^2)
+# end
+
+# # Builds a graph representation from the segments
+# function build_graph(map)
+#     nodes = Set{Int}()
+#     edges = Dict{Int, Vector{Int}}()
+#     segments = Dict{Int, VehicleSim.RoadSegment}()
+#     pullout_zones = Set{Int}()
+
+#     for (id, segment) in map
+#         println("abc")
+#         push!(nodes, id)
+#         edges[id] = segment.children
+#         segments[id] = segment
+#         println(nodes)
+#         if contains_lane_type(segment, LaneTypes.loading_zone)
+#             push!(pullout_zones, id)
+#         end
+#         println("abc")
+#     end
+
+#     (nodes=nodes, edges=edges, segments=segments, pullout_zones=pullout_zones)
+# end
+
+# # Check if a segment contains a specific lane type
+# function contains_lane_type(segment, lane_type)
+#     lane_type in segment.lane_types
+# end
+
+# # Implements Dijkstra's algorithm to find shortest paths
+# function dijkstra(graph, start_segment_id, target_segment_id)
+#     distances = Dict{Int, Float64}()
+#     previous = Dict{Int, Int}()
+#     pq = PriorityQueue()
+
+#     for node_id in keys(graph.edges)
+#         distances[node_id] = Inf
+#         pq[node_id] = Inf
+#     end
+#     distances[start_segment_id] = 0
+#     pq[start_segment_id] = 0
+
+#     while !isempty(pq)
+#         current_id = dequeue_min!(pq)
+#         if current_id == target_segment_id || (current_id in graph.pullout_zones && target_segment_id in graph.pullout_zones)
+#             break
+#         end
+
+#         for adjacent_id in graph.edges[current_id]
+#             edge_weight = calculate_edge_weight(current_id, adjacent_id, graph)
+#             alt = distances[current_id] + edge_weight
+#             if alt < distances[adjacent_id]
+#                 distances[adjacent_id] = alt
+#                 previous[adjacent_id] = current_id
+#                 pq[adjacent_id] = alt
+#             end
+#         end
+#     end
+#     return distances, previous
+# end
+
+# # Calculates the weight for edges between segments
+# function calculate_edge_weight(from_id, to_id, graph)
+#     segment = graph.segments[from_id]
+#     calculate_segment_length(segment) / 10.0
+# end
+
+# # Reconstructs the path from start to target using the previous map
+# function reconstruct_path(previous, start_segment_id, target_segment_id)
+#     path = []
+#     current_id = target_segment_id
+#     while current_id != start_segment_id
+#         push!(path, current_id)
+#         current_id = get(previous, current_id, nothing)
+#         if isnothing(current_id)
+#             return []  # Return an empty path if no path is found
+#         end
+#     end
+#     push!(path, start_segment_id)
+#     reverse(path)
+# end
+
+# # Main function to get the route between two segment IDs
+# function get_route(map, start_segment_id, target_segment_id)
+#     graph = build_graph(map)
+#     # println("Graph: ", graph)
+#     distances, previous = dijkstra(graph, start_segment_id, target_segment_id)
+#     println("Distances: ", distances)
+#     path = reconstruct_path(previous, start_segment_id, target_segment_id)
+#     map_segments = [map[id] for id in path] # Maps segment IDs to actual segment data
+#     map_segments
+# end
+
+# Builds a graph representation from the segments
+function build_graph(map)
+    nodes = Set{Int}()
+    edges = Dict{Int, Vector{Int}}()
+    segments = Dict{Int, VehicleSim.RoadSegment}()
+
+    for (id, segment) in map
+        println("Processing segment ID: ", id)  # Debug statement
+        push!(nodes, id)
+        edges[id] = segment.children
+        segments[id] = segment
+    end
+
+    println("Graph built with nodes and edges.")  # Debug statement
+    (nodes=nodes, edges=edges, segments=segments)
+end
+
+function dijkstra(graph, start_segment_id, target_segment_id)
+    distances = Dict{Int, Float64}()
+    previous = Dict{Int, Int}()
+    pq = PriorityQueue{Int, Float64}()  # Define as Min-Priority Queue
+
+    # Initialize distances and queue
+    for node_id in keys(graph.edges)
+        distances[node_id] = Inf
+        pq[node_id] = Inf  # Set initial distance as Infinite
+    end
+    distances[start_segment_id] = 0
+    pq[start_segment_id] = 0  # Set distance to start node as 0
+
+    println("Starting Dijkstra's algorithm")
+
+    while !isempty(pq)
+        current_id = dequeue_pair!(pq) |> first  # Fetch the node with the minimum distance and remove it from pq
+
+        println("Processing node: ", current_id)
+
+        # Exit loop if target is reached
+        if current_id == target_segment_id
+            println("Target segment reached")
+            break
+        end
+
+        # Explore each adjacent node
+        for adjacent_id in graph.edges[current_id]
+            edge_weight = calculate_edge_weight(current_id, adjacent_id, graph)
+            alt = distances[current_id] + edge_weight
+            if alt < distances[adjacent_id]
+                distances[adjacent_id] = alt
+                previous[adjacent_id] = current_id
+                pq[adjacent_id] = alt  # Correctly updates the priority queue with the new distance
+                println("Updated distance for node ", adjacent_id, " to ", alt)
+            end
+        end
+    end
+
+    println("Dijkstra computation completed.")
+    return distances, previous
+end
+
+
+function calculate_edge_weight(from_id, to_id, graph)
+    segment = graph.segments[from_id]
+    calculate_segment_length(segment) / 10.0
+end
 
 function calculate_segment_length(segment)
     pt_a = segment.lane_boundaries[1].pt_a
@@ -909,89 +1072,33 @@ function calculate_segment_length(segment)
     sqrt((pt_b[1] - pt_a[1])^2 + (pt_b[2] - pt_a[2])^2)
 end
 
-function build_graph(all_segs)
-    nodes = Set{Int}()
-    edges = Dict{Int, Vector{Int}}()
-    segments = Dict{Int, RoadSegment}()
-    pullout_zones = Set{Int}()
 
-    for (id, segment) in all_segs
-        push!(nodes, id) 
-        edges[id] = segment.children
-        segments[id] = segment
-        if contains_lane_type(segment, LaneTypes.loading_zone)
-            push!(pullout_zones, id)
-        end
-    end
-
-    (nodes, edges, segments, pullout_zones)
-end
-
-function contains_lane_type(segment, lane_type)
-    lane_type in segment.lane_types
-end
-
-function dijkstra(graph, start_segment_id, target_segment_id)
-    distances = Dict{Int, Float64}()
-    previous = Dict{Int, Int}()
-    pq = PriorityQueue()
-
-    for node_id in keys(graph.edges)
-        distances[node_id] = Inf
-        enqueue!(pq, node_id, Inf)
-    end
-    distances[start_segment_id] = 0
-    update!(pq, start_segment_id, 0)
-
-    while !isempty(pq)
-        current_id = dequeue!(pq)
-        if current_id == target_segment_id || (current_id in graph.pullout_zones && target_segment_idin, graph.pullout_zones)
-            break
-        end
-
-        for adjacent_id in graph.edges[current_id]
-            edge_weight = calculate_edge_weight(current_id, adjacent_id, graph)
-            alt = distances[current_id] + edge_weight
-            if alt < distances[adjacent_id]
-                distances[adjacent_id] = alt
-                previous[adjacent_id] = current_id
-                update!(pq, adjacent_id, alt)
-            end
-        end
-    end
-    return distances, previous
-end
-
-function calculate_edge_weight(from_id, to_id, graph)
-    segment = graph.segments[from_id]
-    calculate_segment_length(segment) / 10.0
-end
-
-function reconstruct_path(previous, start_segment_id, target_segment_id, map)
+# Reconstructs the path from start to target using the previous map
+function reconstruct_path(previous, start_segment_id, target_segment_id)
     path = []
-    segments = []
     current_id = target_segment_id
     while current_id != start_segment_id
         push!(path, current_id)
-        current_id = previous[current_id]
+        current_id = get(previous, current_id, nothing)
         if isnothing(current_id)
-            return []  
+            println("No path found to segment ", current_id)  # Debug statement
+            return []  # Return an empty path if no path is found
         end
     end
     push!(path, start_segment_id)
     reverse(path)
-    println("path")
-    println(path)
-    for id in path
-        push!(segments, map[id])
-    end
-    segments
 end
 
+# Main function to get the route between two segment IDs
 function get_route(map, start_segment_id, target_segment_id)
     graph = build_graph(map)
+    # println("Graph: ", graph)  # Debug statement
     distances, previous = dijkstra(graph, start_segment_id, target_segment_id)
-    segments = reconstruct_path(previous, start_segment_id, target_segment_id, map)
-    segments
+    # println("Distances: ", distances)  # Debug statement
+    path = reconstruct_path(previous, start_segment_id, target_segment_id)
+    map_segments = [map[id] for id in path] # Maps segment IDs to actual segment data
+    map_segments
 end
+
+
 

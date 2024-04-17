@@ -8,6 +8,7 @@ using Serialization
 using StaticArrays
 using Ipopt
 using Symbolics 
+using DataStructures
 
 include("client.jl")
 include("example_project.jl")
