@@ -6,12 +6,11 @@ using SparseArrays
 using Sockets
 using Serialization
 using StaticArrays
-using Ipopt
+# using Ipopt
 using Symbolics 
 using DataStructures
 
 include("client.jl")
 include("example_project.jl")
-# include("trajectory_functions.jl")
 
 end # module livelineAVStack
