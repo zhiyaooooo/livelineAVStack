@@ -4,7 +4,6 @@ struct MyLocalizationType
     orientation::SVector{4, Float64} # represented as quaternion
     velocity::SVector{3, Float64}
     angular_velocity::SVector{3, Float64} # angular velocity around x,y,z axes
-    current_segment::RoadSegment
 end
 
 struct MyPerceptionType
@@ -51,6 +50,33 @@ function Jac_h_imu(x)
     return J
 end
 
+
+function localize(gps_channel, imu_channel, localization_state_channel)
+    # Set up algorithm / initialize variables
+    while true
+        fresh_gps_meas = []
+        while isready(gps_channel)
+            meas = take!(gps_channel)
+            push!(fresh_gps_meas, meas)
+        end
+        fresh_imu_meas = []
+        while isready(imu_channel)
+            meas = take!(imu_channel)
+            push!(fresh_imu_meas, meas)
+        end
+
+        # process measurements
+        # placeholder implementation -- just sends the measurements from the sensors without doing any processing
+        orientation = Quaternion{Float64}(angle_to_quaternion_z(fresh_gps_meas.heading))
+        localization_state = MyLocalizationType(time(), [fresh_gps_meas.lat, fresh_gps_meas.long, 2.6455622], orientation, fresh_imu_meas.velocity, fresh_imu_meas.angular_velocity)
+        if isready(localization_state_channel)
+            take!(localization_state_channel)
+        end
+        put!(localization_state_channel, localization_state)
+    end 
+end
+
+"""
 function localize(gps_channel, imu_channel, localization_state_channel, map_segments)
     # Set up algorithm / initialize variables
     current_time = time()
@@ -130,6 +156,7 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
         end
     end 
 end
+"""
 
 
 function predict_next_state(state_estimate::MyLocalizationType, delta_time::Float64, P::Matrix{Float64}, Q::Matrix{Float64})
