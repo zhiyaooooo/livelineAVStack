@@ -14,34 +14,41 @@ end
 
 using StaticArrays
 
-function heading_to_quaternion(heading::Float64)
-    # Convert heading angle to quaternion representation
-    # Assume rotation around vertical (z) axis
-    # Construct quaternion [cos(θ/2), 0, 0, sin(θ/2)]
-    θ = deg2rad(heading)  # Convert heading angle to radians
-    q = SVector(cos(θ / 2), 0.0, 0.0, sin(θ / 2))
-    return q
+function quaternion_to_angle_z(q)
+    # q is given as (w, x, y, z)
+    w, x, y, z = q
+    # Ensure it is a unit quaternion (normalize if not sure)
+    norm_q = sqrt(w^2 + x^2 + y^2 + z^2)
+    w, x, y, z = w / norm_q, x / norm_q, y / norm_q, z / norm_q
+    # Calculate the angle from the quaternion
+    theta = 2 * acos(w)
+    # Ensure the angle is correctly oriented for z-axis rotation
+    if z < 0
+        theta = -theta
+    end
+    return theta
 end
 
-function is_inside_segment(car_position::SVector{3, Float64}, segment::RoadSegment)
-    within_boundaries = true
-    
-    # Check if the car's position is within each lane boundary
-    for boundary in segment.lane_boundaries
-        # Determine if the car's latitude and longitude fall within the boundary
-        within_boundary = (boundary.pt_a[2] <= car_position[2] <= boundary.pt_b[2] ||
-                           boundary.pt_b[2] <= car_position[2] <= boundary.pt_a[2]) &&
-                          (boundary.pt_a[1] <= car_position[1] <= boundary.pt_b[1] ||
-                           boundary.pt_b[1] <= car_position[1] <= boundary.pt_a[1])
-        
-        # If the car is not within any one boundary, it's not within the segment
-        if !within_boundary
-            within_boundaries = false
-            break
-        end
-    end
-    
-    return within_boundaries
+function angle_to_quaternion_z(theta)
+    # Calculate the quaternion components
+    w = cos(theta / 2)
+    z = sin(theta / 2)
+    # Since the rotation is about the z-axis, x and y components are zero
+    return (w, 0, 0, z)
+end
+
+function h_imu(x)
+    linear_vel = x[8:10] # velocity
+    angular_vel = x[11:13] # angular velocity
+    imu_measurement = [linear_vel; angular_vel]
+    return imu_measurement
+end
+
+function Jac_h_imu(x)
+    J = zeros(6, 13)
+    J[1:3, 8:10] = I(3) # Derivative w.r.t linear velocity
+    J[4:6, 11:13] = I(3) # Derivative w.r.t angular velocity
+    return J
 end
 
 function localize(gps_channel, imu_channel, localization_state_channel, map_segments)
@@ -50,34 +57,25 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
     previous_time = current_time
     time_step = 0.1 # 10 hertz
 
+    # initialize the state estimate
     time_estimate = time()
     position_estimate = [fresh_gps_meas.lat, fresh_gps_meas.long, 0]
-    orientation_estimate = Quaternion{Float64}(heading_to_quaternion(fresh_gps_meas.heading))
+    orientation_estimate = Quaternion{Float64}(angle_to_quaternion_z(fresh_gps_meas.heading))
     velocity_estimate = fresh_imu_meas.linear_vel
     angular_velocity_estimate = fresh_imu_meas.angular_vel
     size_estimate = [0, 0, 0]
     current_segment_estimate = nothing
     state_estimate = MyLocalizationType(time_estimate, position_estimate, orientation_estimate, velocity_estimate, angular_velocity_estimate, size_estimate, current_segment_estimate)
+    
+    # Initialize the covariance matrix P
+    P = Diagonal([1.0 for _ in 1:13]) # Assuming a 13-dimensional state vector
 
-    covariance_matrix = Diagonal([
-        0.01,   # Variance of time
-        1.0,    # Variance of position_x
-        1.0,    # Variance of position_y
-        1.0,    # Variance of position_z
-        0.1,   # Variance of orientation_1
-        0.1,   # Variance of orientation_2
-        0.1,   # Variance of orientation_3
-        0.1,   # Variance of orientation_4
-        0.001,  # Variance of velocity_x
-        0.001,  # Variance of velocity_y
-        0.001,  # Variance of velocity_z
-        0.001, # Variance of angular_velocity_x
-        0.001, # Variance of angular_velocity_y
-        0.001, # Variance of angular_velocity_z
-        0.0,    # Variance of size_length
-        0.0,    # Variance of size_width
-        0.0     # Variance of size_height
-    ])
+    # Define the process noise covariance matrix Q
+    Q = Diagonal([0.01 for _ in 1:13]) # Example values; adjust based on your system's noise characteristics
+
+    # Define the measurement noise covariance matrices for GPS and IMU
+    R_gps = Diagonal([1.0^2, 1.0^2, 0.1^2])
+    R_imu = Diagonal([0.001^2, 0.001^2, 0.001^2, 0.001^2, 0.001^2, 0.001^2])
 
     while true
         # update the current time
@@ -103,13 +101,12 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
 
             # prediction step
             # predict the next state of the system based on the known dynamics of the vehicle. 
-            predicted_state = predict_next_state(state_estimate, dt)
+            predicted_state, P = predict_next_state(state_estimate, dt, P, Q)
 
             # update the covariance matrix
             # fuse the gps and imu measurements with the predicted state to obtain a more accurate estimate of the current state
-            state_estimate, covariance_matrix = update_covariance_matrix(predicted_state, fresh_gps_meas, fresh_imu_meas, covariance_matrix)
+            state_estimate, P = update_covariance_matrix(predicted_state, fresh_gps_meas, fresh_imu_meas, P, R_gps, R_imu)
 
-            # TO DO: add the current segment into the state estimate
             cur_segment = nothing
             for map_segment in map_segments
                 if is_inside_segment(fresh_gps_meas.position, map_segment)
@@ -117,7 +114,7 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
                     break
                 end
             end
-            if current_segment === nothing
+            if cur_segment === nothing
                 print("Error: car not inside a segment")
             end
             state_estimate.current_segment = cur_segment
@@ -125,6 +122,8 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
             # add the changes into the localization_state_channel
             localization_state = state_estimate
             if isready(localization_state_channel)
+                latest_localization_state = fetch(localization_state_channel)
+                println(latest_localization_state)
                 take!(localization_state_channel)
             end
             put!(localization_state_channel, localization_state)
@@ -133,91 +132,72 @@ function localize(gps_channel, imu_channel, localization_state_channel, map_segm
 end
 
 
-function debug_localization(localization_state_channel)
-    while true
-        # Fetch the latest localization state
-        state = fetch(localization_state_channel)
-        
-        # Print the contents of the localization state
-        println("Localization State:")
-        println("Time: ", state.time)
-        println("Position: ", state.position)
-        println("Orientation: ", state.orientation)
-        println("Velocity: ", state.velocity)
-        println("Angular Velocity: ", state.angular_velocity)
-        println("Size: ", state.size)
-        println("Current Segment: ", state.current_segment)
-        println()  # Add a blank line for better readability
-        
-        # Sleep for a short while to avoid excessive CPU usage
-        sleep(0.1)
-    end
-end
-
-function predict_next_state(state_estimate::MyLocalizationType, delta_time::Float64)
-    """
-    Given the current state information, use velocity info to predict the future state of the car
-    """
-    # Extract relevant information from the state estimate
+function predict_next_state(state_estimate::MyLocalizationType, delta_time::Float64, P::Matrix{Float64}, Q::Matrix{Float64})
+    # Remove time and current_segment from the state_estimate
     position = state_estimate.position
-    orientation = state_estimate.orientation
+    quaternion = state_estimate.orientation
     velocity = state_estimate.velocity
-    angular_velocity = state_estimate.angular_velocity
+    angular_vel = state_estimate.angular_velocity
+    x_current = vcat(position, quaternion, velocity, angular_vel)
 
-    # TO DO: not sure if this is properly accounting for angular velocity
+    # Compute the Jacobian of the state vector BEFORE applying dynamics
+    # This assumes Jac_x_f computes the Jacobian of the dynamics function with respect to the state vector
+    F = Jac_x_f(x_current, delta_time)
 
-    # Update orientation based on angular velocity
-    q_angular_velocity = Quaternion{Float64}([0.0, angular_velocity...])
-    quaternion_multiply!(orientation, q_angular_velocity, orientation)
-    normalize!(orientation)
+    # Use rigid_body_dynamics to predict the next state based on the current state
+    predicted_state_vector = rigid_body_dynamics(position, quaternion, velocity, angular_vel, delta_time)
 
-    # Update position based on velocity and orientation
-    R = quaternion_to_rotation_matrix(orientation)
-    position += delta_time * (R * velocity)
-
+    # add time and current_segment back in
     predicted_state = MyLocalizationType(
-        state_estimate.time + delta_time,
-        position,
-        orientation,
-        velocity,
-        angular_velocity,
-        state_estimate.size,
-        state_estimate.current_segment
+        time(),
+        predicted_state_vector[1:3],
+        predicted_state_vector[4:7],
+        predicted_state_vector[8:10],
+        predicted_state_vector[11:13],
+        state_estimate.map_segment
     )
-    return predicted_state
+    
+    # Predict the next covariance matrix incorporating process noise
+    P_predicted = F * P * F' + Q
+    
+    return predicted_state, P_predicted
 end
 
 
-function update_covariance_matrix(predicted_state_estimate::MyLocalizationType, gps_measurement::GPSMeasurement, imu_measurement::IMUMeasurement, covariance_matrix::Matrix{Float64})
-    """
-    Use the predicted state and the real measurements to update the covariance matrix for future calculations
-    """
-    gps_position = [gps_measurement.lat, gps_measurement.long, 0.0]
-    gps_heading = gps_measurement.heading
-    imu_linear_vel = imu_measurement.linear_vel
-    imu_angular_vel = imu_measurement.angular_vel
+function update_covariance_matrix(predicted_state_estimate::MyLocalizationType, fresh_gps_meas, fresh_imu_meas, P, R_gps, R_imu)
+    # Extract relevant information from the predicted state estimate
+    position = predicted_state_estimate.position
+    quaternion = predicted_state_estimate.orientation
+    velocity = predicted_state_estimate.velocity
+    angular_vel = predicted_state_estimate.angular_velocity
 
-    predicted_gps_position = predicted_state_estimate.position
-    predicted_imu_linear_vel = predicted_state_estimate.velocity
-    predicted_imu_angular_vel = predicted_state_estimate.angular_velocity
+    # Measurement covariance matrices
+    gps_covariance = R_gps
+    imu_covariance = R_imu
 
-    # Measurement covariance
-    # found these vals in the measurements.jl file
-    gps_covariance = Diagonal([1.0, 1.0, 0.01])
-    imu_covariance = Diagonal([0.000001, 0.000001, 0.000001])
+    # Identity matrix
+    I = Matrix{Float64}(I, 13, 13)
 
-    # Calculate Kalman gain
-    kalman_gain_gps = covariance_matrix * inv(covariance_matrix + gps_covariance)
-    kalman_gain_imu = covariance_matrix * inv(covariance_matrix + imu_covariance)
+    # Compute the measurement model h for GPS and IMU measurements
+    h_gps = h_gps([position; quaternion])
+    h_imu = h_imu([velocity; angular_vel])
 
-    # Update state estimate
-    state_estimate.position += kalman_gain_gps * (gps_position - predicted_gps_position)
-    state_estimate.orientation += kalman_gain_gps * (heading_to_quaternion(gps_heading) - predicted_state_estimate.orientation)
-    state_estimate.velocity += kalman_gain_imu * (imu_linear_vel - predicted_imu_linear_vel)
-    state_estimate.angular_velocity += kalman_gain_imu * (imu_angular_vel - predicted_imu_angular_vel)
+    # Compute the Jacobian matrices for GPS and IMU measurements
+    H_gps = Jac_h_gps([position; quaternion])
+    H_imu = Jac_h_imu([velocity; angular_vel])
+
+    # Calculate Kalman Gain for GPS and IMU measurements
+    K_gps = P * H_gps' / (H_gps * P * H_gps' + gps_covariance)
+    K_imu = P * H_imu' / (H_imu * P * H_imu' + imu_covariance)
+
+    # Update state estimate based on GPS and IMU measurements
+    state_estimate.position += K_gps * (fresh_gps_meas - h_gps)
+    state_estimate.orientation += K_gps * (fresh_gps_heading - h_gps_heading)
+    state_estimate.velocity += K_imu * (fresh_imu_linear_vel - h_imu_linear_vel)
+    state_estimate.angular_velocity += K_imu * (fresh_imu_angular_vel - h_imu_angular_vel)
 
     # Update covariance matrix
-    updated_covariance_matrix = covariance_matrix - kalman_gain_gps * covariance_matrix - kalman_gain_imu * covariance_matrix
+    updated_covariance_matrix = (I - K_gps * H_gps) * P * (I - K_gps * H_gps)' + K_gps * gps_covariance * K_gps' + K_imu * imu_covariance * K_imu'
 
     return state_estimate, updated_covariance_matrix
 end
