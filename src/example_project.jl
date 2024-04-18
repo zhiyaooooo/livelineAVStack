@@ -1249,6 +1249,29 @@ function calculate_front_position(x_c, y_c, theta, L)
     y_front = y_c + (L / 2) * sin(theta)
     return (x_front, y_front)
 end
+function is_ahead(car1_position, car1_orientation, car2_position, car2_orientation)
+    # 计算两车的位置向量
+    direction_to_car2 = car2_position - car1_position
+
+    # 将朝向角度转换为向量
+    car1_heading_vector = [cos(car1_orientation), sin(car1_orientation)]
+    car2_heading_vector = [cos(car2_orientation), sin(car2_orientation)]
+
+    # 计算朝向向量的点积
+    dot_product = dot(car1_heading_vector, car2_heading_vector)
+
+    # 判断朝向是否相反
+    if dot_product < -0.9 # 容忍小的误差
+        return 1
+    elseif dot_product > 0.9 # 朝向大致相同
+        # 计算车1到车2的方向与车1的朝向的点积
+        if dot(direction_to_car2, car1_heading_vector) > 0
+            return 1
+        end
+    end
+
+    return 0
+end
 
 function pure_pursuit(v1, v2, v3, segments; ls = 2.0, max_vel = 10.0, timestamp = 0.2) #ls = lookahead time
 
@@ -1288,12 +1311,12 @@ function pure_pursuit(v1, v2, v3, segments; ls = 2.0, max_vel = 10.0, timestamp 
         predict_x2 = constant_velocity_prediction(center_x2, timestamp, u2)
         predict_x3 = constant_velocity_prediction(center_x3, timestamp, u3)
         alpha = 0.5
-        while collision_constraint(predict_x1, predict_x2, v1.size, v2.size)<0 && u[1]+v>0.0
+        while collision_constraint(predict_x1, predict_x2, v1.size, v2.size)<0 && u[1]+v>0.0 && is_ahead(v1.position[1:2], x1[4],v2.position[1:2], x2[4])==0
             println("reduce")
             u[1] -= alpha
             predict_x1 = constant_velocity_prediction(center_x1, timestamp, u)
         end
-        while collision_constraint(predict_x1, predict_x3, v1.size, v3.size)<0 && u[1]+v>0.0
+        while collision_constraint(predict_x1, predict_x3, v1.size, v3.size)<0 && u[1]+v>0.0 &&is_ahead(v1.position[1:2], x1[4],v3.position[1:2], x3[4])==0
             u[1] -= alpha
             predict_x1 = constant_velocity_prediction(center_x1, timestamp, u)
         end
@@ -1458,6 +1481,7 @@ get_vehicle = 0
 while true
 
     # sleep(0.2)
+try
     if get_vehicle == 0
         vehicle_id = fetch(vehicle_channel)
         get_vehicle =1
@@ -1475,7 +1499,7 @@ while true
             latest_localization_state.size  # size
         )
         push!(latest_perception_state, temp)
-        # println("csnm")
+        println("csnm")
         latest_localization_state = take!(gt_channel)
     end
     println("v id")
@@ -1485,7 +1509,7 @@ while true
     # println("gt")
     # println(latest_localization_state)
     println("perception")
-    println(latest_perception_state)
+    # println(latest_perception_state)
 
     # println("target1")
     target_segment = fetch(target_segment_channel)
@@ -1530,7 +1554,8 @@ while true
         # println(current_segment[1].id)
         # println(current_segment[1])
     now_segments = get_route(map, start_segment_id, target_segment_id)
-    # println(now_segments)
+    println("route")
+    println(now_segments)
     segments = now_segments
     route_flag = 0
     end
@@ -1582,12 +1607,12 @@ while true
 
         println("more than 1")
         dists = [Inf; [norm(v.position[1:2]-latest_localization_state.position[1:2]) for v in latest_perception_state]]
-        println("distance")
-        println(dists)
+        # println("distance")
+        # println(dists)
         
         closest = partialsortperm(dists, 1:2)
-        println("closest")
-        println(closest)
+        # println("closest")
+        # println(closest)
         v2 = latest_perception_state[closest[1]-1]
         v3 = latest_perception_state[closest[2]-1]
 
@@ -1612,7 +1637,7 @@ while true
     # my_segments = []
     # try
         my_segments = get_lane_segments(segments, 3)
-        # println("my road")
+        println("my road")
         # println(my_segments)
     # catch e
     #     println("1")
@@ -1636,7 +1661,9 @@ while true
         sleep(2.0)
     end
 end
-
+catch each
+    println(each)
+end
 
 end
 end
