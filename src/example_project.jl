@@ -997,6 +997,7 @@ while true
     # println(target_segment)
     current_segment = []
     v1 = latest_localization_state
+    # println(v1)
     front_position = calculate_front_position(latest_localization_state.position[1], latest_localization_state.position[2], quaternion_to_angle_z(latest_localization_state.orientation), latest_localization_state.size[1])
     car_position = [front_position[1], front_position[2], 0]
     for map_segment in map
@@ -1018,9 +1019,14 @@ while true
         cmd = (0.0, 0.0, true)
         serialize(socket, cmd)
         segments= []
+        now_target = take!(target_segment_channel)
         route_flag = 1
         sleep(5.0) 
     else
+        target_segment = fetch(target_segment_channel)
+        target_segment_id = target_segment.id
+        println("target_segment")
+        println(target_segment_id)
     # try
     if route_flag == 1
         start_segment_id = current_segment[1].id
@@ -1148,7 +1154,7 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
 
     localization_state_channel = Channel{MyLocalizationType}(1)
     perception_state_channel = Channel{MyPerceptionType}(1)
-    target_segment_channel = Channel{VehicleSim.RoadSegment}(32)
+    target_segment_channel = Channel{VehicleSim.RoadSegment}(1)
 
     target_map_segment = 0 # (not a valid segment, will be overwritten by message)
     ego_vehicle_id = 0 # (not a valid id, will be overwritten by message. This is used for discerning ground-truth messages)
