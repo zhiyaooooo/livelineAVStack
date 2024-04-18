@@ -1139,7 +1139,7 @@ while true
     # println(steering_angle)
     cmd = (steering_angle, target_vel, true)
     serialize(socket, cmd)
-    if target_vel==0.0  
+    if stop_sign==0
         sleep(2.0)
     end
 end
