@@ -12,6 +12,5 @@ using DataStructures
 
 include("client.jl")
 include("example_project.jl")
-include("decision_part.jl")
 
 end # module livelineAVStack
