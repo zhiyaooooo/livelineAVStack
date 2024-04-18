@@ -6,7 +6,6 @@ struct MyLocalizationType
     velocity::SVector{3, Float64}
     angular_velocity::SVector{3, Float64} # angular velocity around x,y,z axes
     size::SVector{3, Float64} # length, width, height of 3d bounding box centered at (position/orientation)
-    map_segment::VehicleSim.RoadSegment
 end
 
 struct MyPerceptionType
@@ -973,7 +972,8 @@ end
 
 
 
-function decision_making(gt_channel, 
+function decision_making(vehicle_channel, 
+    gt_channel, 
     perception_state_channel, 
     map, 
     target_segment_channel, 
@@ -984,10 +984,22 @@ println("motion start")
 # println(map)
 route_flag = 1
 segments = []   
+vehicle_id = 0
+get_vehicle = 0
 
 while true
     # sleep(0.2)
+    if get_vehicle == 0
+        vehicle_id = fetch(vehicle_channel)
+        get_vehicle =1
+    end
     latest_localization_state = take!(gt_channel)
+    while latest_localization_state.vehicle_id!=vehicle_id
+        latest_localization_state = take!(gt_channel)
+    end
+    println("v id")
+    println(latest_localization_state.vehicle_id)
+
     # println("gt")
     # println(latest_localization_state)
     # latest_perception_state = fetch(perception_state_channel)
@@ -997,7 +1009,7 @@ while true
     # println(target_segment)
     current_segment = []
     v1 = latest_localization_state
-    # println(v1)
+    println(v1)
     front_position = calculate_front_position(latest_localization_state.position[1], latest_localization_state.position[2], quaternion_to_angle_z(latest_localization_state.orientation), latest_localization_state.size[1])
     car_position = [front_position[1], front_position[2], 0]
     for map_segment in map
@@ -1155,6 +1167,7 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
     localization_state_channel = Channel{MyLocalizationType}(1)
     perception_state_channel = Channel{MyPerceptionType}(1)
     target_segment_channel = Channel{VehicleSim.RoadSegment}(1)
+    vehicle_channel = Channel{Int}(1)
 
     target_map_segment = 0 # (not a valid segment, will be overwritten by message)
     ego_vehicle_id = 0 # (not a valid id, will be overwritten by message. This is used for discerning ground-truth messages)
@@ -1179,6 +1192,9 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
         !isfull(target_segment_channel) &&put!(target_segment_channel, map_segments[target_map_segment])
         # println(map_segments[target_map_segment])
         ego_vehicle_id = measurement_msg.vehicle_id
+        !isfull(vehicle_channel) &&put!(vehicle_channel, ego_vehicle_id)
+        # println("ego id")
+        # println(ego_vehicle_id)
         for meas in measurement_msg.measurements
             if meas isa GPSMeasurement
                 !isfull(gps_channel) && put!(gps_channel, meas)
@@ -1195,7 +1211,7 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
     # @async localize(gps_channel, imu_channel, localization_state_channel)
     # @async perception(cam_channel, localization_state_channel, perception_state_channel)
     # @async decision_making(localization_state_channel, perception_state_channel, map, target_segment_channel. socket)
-    @async decision_making(gt_channel, perception_state_channel, map_segments, target_segment_channel, socket)
+    @async decision_making(vehicle_channel, gt_channel, perception_state_channel, map_segments, target_segment_channel, socket)
 end
 
 
