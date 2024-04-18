@@ -16,3 +16,5 @@ pkg> up VehicleSim  # if new fixes have been pushed to VehicleSim, restart Julia
 #press backspace to quit pkg mode  
 using Revise, Sockets, livelineAVStack  
 livelineAVStack.keyboard_client(ip"")  #enter your ip
+our client:
+livelineAVStack.my_client(ip"")  #enter your ip
