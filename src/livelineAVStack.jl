@@ -6,7 +6,6 @@ using SparseArrays
 using Sockets
 using Serialization
 using StaticArrays
-using Ipopt
 using Symbolics 
 using DataStructures
 using Distributions
