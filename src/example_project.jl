@@ -6,7 +6,6 @@ struct MyLocalizationType
     velocity::SVector{3, Float64}
     angular_velocity::SVector{3, Float64} # angular velocity around x,y,z axes
     size::SVector{3, Float64} # length, width, height of 3d bounding box centered at (position/orientation)
-    map_segment::VehicleSim.RoadSegment
 end
 
 struct MyPerceptionType
@@ -640,92 +639,29 @@ function update_tracks(tracks, bboxes_of_objects, time_now, ego_orientation, ego
     end
 end
 
-function localize(gps_channel, imu_channel, localization_state_channel, map_segments)
+
+function localize(gps_channel, imu_channel, localization_state_channel)
     # Set up algorithm / initialize variables
-    current_time = time()
-    previous_time = current_time
-    time_step = 0.1 # 10 hertz
-
-    time_estimate = time()
-    position_estimate = [fresh_gps_meas.lat, fresh_gps_meas.long, 0]
-    orientation_estimate = Quaternion{Float64}(heading_to_quaternion(fresh_gps_meas.heading))
-    velocity_estimate = fresh_imu_meas.linear_vel
-    angular_velocity_estimate = fresh_imu_meas.angular_vel
-    size_estimate = [0, 0, 0]
-    current_segment_estimate = nothing
-
-    state_estimate = MyLocalizationType(time_estimate, position_estimate, orientation_estimate, velocity_estimate, angular_velocity_estimate, size_estimate, current_segment_estimate)
-
-    covariance_matrix = Diagonal([
-        0.01,   # Variance of time
-        1.0,    # Variance of position_x
-        1.0,    # Variance of position_y
-        1.0,    # Variance of position_z
-        0.1,   # Variance of orientation_1
-        0.1,   # Variance of orientation_2
-        0.1,   # Variance of orientation_3
-        0.1,   # Variance of orientation_4
-        0.001,  # Variance of velocity_x
-        0.001,  # Variance of velocity_y
-        0.001,  # Variance of velocity_z
-        0.001, # Variance of angular_velocity_x
-        0.001, # Variance of angular_velocity_y
-        0.001, # Variance of angular_velocity_z
-        0.0,    # Variance of size_length
-        0.0,    # Variance of size_width
-        0.0     # Variance of size_height
-    ])
-
     while true
-        # update the current time
-        current_time = time()
-        dt = current_time - previous_time
-
-        if dt >= time_step
-            # update the previous time for the next iteration
-            previous_time = current_time
-
-            fresh_gps_meas = []
-            while isready(gps_channel)
-                meas = take!(gps_channel)
-                push!(fresh_gps_meas, meas)
-            end
-            fresh_imu_meas = []
-            while isready(imu_channel)
-                meas = take!(imu_channel)
-                push!(fresh_imu_meas, meas)
-            end
-            
-            # process measurements
-
-            # prediction step
-            # predict the next state of the system based on the known dynamics of the vehicle. 
-            predicted_state = predict_next_state(state_estimate, dt)
-
-            # update the covariance matrix
-            # fuse the gps and imu measurements with the predicted state to obtain a more accurate estimate of the current state
-            state_estimate, covariance_matrix = update_covariance_matrix(predicted_state, fresh_gps_meas, fresh_imu_meas, covariance_matrix)
-
-            # TO DO: add the current segment into the state estimate
-            cur_segment = nothing
-            for map_segment in map_segments
-                if is_inside_segment(fresh_gps_meas.position, map_segment)
-                    cur_segment = map_segment
-                    break
-                end
-            end
-            if current_segment === nothing
-                print("Error: car not inside a segment")
-            end
-            state_estimate.current_segment = cur_segment
-
-            # add the changes into the localization_state_channel
-            localization_state = state_estimate
-            if isready(localization_state_channel)
-                take!(localization_state_channel)
-            end
-            put!(localization_state_channel, localization_state)
+        fresh_gps_meas = []
+        while isready(gps_channel)
+            meas = take!(gps_channel)
+            push!(fresh_gps_meas, meas)
         end
+        fresh_imu_meas = []
+        while isready(imu_channel)
+            meas = take!(imu_channel)
+            push!(fresh_imu_meas, meas)
+        end
+
+        # process measurements
+        # placeholder implementation -- just sends the measurements from the sensors without doing any processing
+        orientation = Quaternion{Float64}(angle_to_quaternion_z(fresh_gps_meas.heading))
+        localization_state = MyLocalizationType(time(), [fresh_gps_meas.lat, fresh_gps_meas.long, 2.6455622], orientation, fresh_imu_meas.velocity, fresh_imu_meas.angular_velocity)
+        if isready(localization_state_channel)
+            take!(localization_state_channel)
+        end
+        put!(localization_state_channel, localization_state)
     end 
 end
 
@@ -1167,7 +1103,7 @@ end
 function collision_constraint(X1, X2, size1, size2)
     # println("collision start")
     # 安全缓冲距离
-    buffer = -0.4
+    buffer = 5
     
     # 计算两个长方体的对角线的一半作为碰撞检测的半径
     radius1 = sqrt((size1[1]/2)^2 + (size1[2]/2)^2)
@@ -1541,7 +1477,7 @@ try
         segments= []
         now_target = take!(target_segment_channel)
         route_flag = 1
-        sleep(5.0) 
+        sleep(2.0) 
     else
         target_segment = fetch(target_segment_channel)
         target_segment_id = target_segment.id
@@ -1623,8 +1559,7 @@ try
     #         max_vel = segment.speed_limit
     #     end
     # end
-    max_vel = 2.5
-    println("cnm")
+    max_vel = 3.0
     stop_sign = 1
     if length(current_segment) > 0
 
@@ -1905,7 +1840,7 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
 
     # @async localize(gps_channel, imu_channel, localization_state_channel)
     # @async perception(cam_channel, localization_state_channel, perception_state_channel, map)
-    # @async decision_making(localization_state_channel, perception_state_channel, map, target_segment_channel. socket)
+    # @async decision_making(localization_state_channel, perception_state_channel, map, target_segment_channel, socket)
     @async decision_making(vehicle_channel, gt_channel, perception_state_channel, map_segments, target_segment_channel, socket)
 end
 
