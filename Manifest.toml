@@ -1582,8 +1582,8 @@ uuid = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 version = "0.21.58"
 
 [[deps.VehicleSim]]
-deps = ["ColorTypes", "Dates", "GeometryBasics", "Infiltrator", "LinearAlgebra", "MeshCat", "MeshCatMechanisms", "OrdinaryDiffEq", "Random", "Revise", "RigidBodyDynamics", "Rotations", "Serialization", "Sockets", "SparseArrays", "StaticArrays", "Suppressor"]
-git-tree-sha1 = "c6d310be0e2818b5ee2038cef6e1cfb508f9dd5b"
+deps = ["ColorTypes", "Dates", "GeometryBasics", "Infiltrator", "LinearAlgebra", "MeshCat", "MeshCatMechanisms", "OrdinaryDiffEq", "Printf", "Random", "Revise", "RigidBodyDynamics", "Rotations", "Serialization", "Sockets", "SparseArrays", "StaticArrays", "Suppressor"]
+git-tree-sha1 = "02eeaaf3430bfde096e807ab2ef766e051a91b51"
 repo-rev = "main"
 repo-url = "https://github.com/VAMPIR-Lab/VehicleSim"
 uuid = "e0769fa5-244c-4558-b677-4a3334c4b6a3"

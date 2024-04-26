@@ -1572,178 +1572,260 @@ function has_passed_halfway(point, diag1, diag2)
 end
 
 
+# function decision_making(vehicle_channel, 
+#     gt_channel, 
+#     perception_state_channel, 
+#     map, 
+#     target_segment_channel, 
+#     socket)
+# # do some setup
+# flag = 0
+# println("motion start")
+# # println(map)
+# route_flag = 1
+# segments = []   
+# vehicle_id = 0
+# get_vehicle = 0
+
+# while true
+#     # sleep(0.2)
+#     if get_vehicle == 0
+#         vehicle_id = fetch(vehicle_channel)
+#         get_vehicle =1
+#     end
+#     latest_localization_state = take!(gt_channel)
+#     while latest_localization_state.vehicle_id!=vehicle_id
+#         latest_localization_state = take!(gt_channel)
+#     end
+#     println("v id")
+#     println(latest_localization_state.vehicle_id)
+
+#     # println("gt")
+#     # println(latest_localization_state)
+#     # latest_perception_state = fetch(perception_state_channel)
+#     latest_perception_state = []
+#     # println("target1")
+#     target_segment = fetch(target_segment_channel)
+#     # println(target_segment)
+#     current_segment = []
+#     v1 = latest_localization_state
+#     println(v1)
+#     front_position = calculate_front_position(latest_localization_state.position[1], latest_localization_state.position[2], quaternion_to_angle_z(latest_localization_state.orientation), latest_localization_state.size[1])
+#     car_position = [front_position[1], front_position[2], 0]
+#     for map_segment in map
+#         if is_inside_segment(car_position, map_segment[2])
+#             # println(map_segment[1])
+#             push!(current_segment, map_segment[2])
+#         end
+
+#     end
+#     if length(current_segment) == 0 
+#         println("Error: car not inside a segment")
+#     end
+
+#     target_segment_id = target_segment.id
+#     println("target_segment")
+#     println(target_segment_id)
+#     if has_passed_halfway(v1.position, target_segment.lane_boundaries[2].pt_a, target_segment.lane_boundaries[3].pt_b)
+#         println("reached")
+#         cmd = (0.0, 0.0, true)
+#         serialize(socket, cmd)
+#         segments= []
+#         now_target = take!(target_segment_channel)
+#         route_flag = 1
+#         sleep(5.0) 
+#     else
+#         target_segment = fetch(target_segment_channel)
+#         target_segment_id = target_segment.id
+#         println("target_segment")
+#         println(target_segment_id)
+#     # try
+#     if route_flag == 1
+#         start_segment_id = current_segment[1].id
+#         # println("start_segment")
+#         # println(current_segment[1].id)
+#         # println(current_segment[1])
+#     now_segments = get_route(map, start_segment_id, target_segment_id)
+#     # println(now_segments)
+#     segments = now_segments
+#     route_flag = 0
+#     end
+# # catch e
+# #     println(e)
+# # end
+#     # println(segments)
+#     # segments = []
+#     # push!(segments, map[32])
+#     # push!(segments, map[30])
+#     # push!(segments, map[28])
+#     # push!(segments, map[26])
+#     # push!(segments, map[24])
+#     # push!(segments, map[17])
+#     # push!(segments, map[14])
+
+#     # println(segments)
+#     if length(latest_perception_state)==0
+#         v2 = MyPerceptionType(
+#             0.0,                        # time
+#             0,                          # vehicle_id
+#             SVector{3, Float64}(0.0, 0.0, 0.0), # position
+#             SVector{4, Float64}(0.0, 0.0, 0.0, 0.0), # orientation (quaternion)
+#             SVector{3, Float64}(Inf, Inf, 0.0), # velocity
+#             0.0,                        # steering_angle
+#             SVector{3, Float64}(0.0, 0.0, 0.0)  # size
+#         )
+#         v3 = MyPerceptionType(
+#             0.0,                        # time
+#             0,                          # vehicle_id
+#             SVector{3, Float64}(0.0, 0.0, 0.0), # position
+#             SVector{4, Float64}(0.0, 0.0, 0.0, 0.0), # orientation (quaternion)
+#             SVector{3, Float64}(Inf, Inf, 0.0), # velocity
+#             0.0,                        # steering_angle
+#             SVector{3, Float64}(0.0, 0.0, 0.0)  # size
+#         )
+#     elseif length(latest_perception_state)==0       
+#         v2 = MyPerceptionType(
+#             0.0,                        # time
+#             0,                          # vehicle_id
+#             SVector{3, Float64}(0.0, 0.0, 0.0), # position
+#             SVector{4, Float64}(0.0, 0.0, 0.0, 0.0), # orientation (quaternion)
+#             SVector{3, Float64}(Inf, Inf, 0.0), # velocity
+#             0.0,                        # steering_angle
+#             SVector{3, Float64}(0.0, 0.0, 0.0)  # size
+#         )
+#         v3 = latest_perception_state[1]
+#     else   
+#         dists = [Inf; [norm(v.position[1:2]-latest_localization_state.position[1:2]) for v in latest_perception_state]]
+#         closest = partialsortperm(dists, 1:2)
+#         v2 = latest_perception_state[closest[1]]
+#         v3 = latest_perception_state[closest[2]]
+#     end
+#     # max_vel = Inf
+#     # for segment in segments
+#     #     if segment.speed_limit <= max_vel
+#     #         max_vel = segment.speed_limit
+#     #     end
+#     # end
+#     max_vel = 2.5
+#     # println("cnm")
+#     if length(current_segment) > 0
+
+#     stop_sign, flag = should_stop(car_position, current_segment[1], flag; speed = max_vel, timestamp = 0.4)
+#     max_vel =  stop_sign==1 ? max_vel : 0
+#     end
+
+#     # println("max_vel")
+#     # println(max_vel)
+#     # my_segments = []
+#     # try
+#         my_segments = get_lane_segments(segments, 3)
+#         # println("my road")
+#         # println(my_segments)
+#     # catch e
+#     #     println("1")
+#     #     println(e)
+#     # end
+#     # try
+#     u = pure_pursuit(v1, v2, v3, my_segments; ls = 2.0, max_vel = max_vel, timestamp = 0.2)
+#     # catch e   
+#     #     println("2") 
+#     #     println(e)
+#     # end
+#     # figure out what to do ... setup motion planning problem etc
+#     # println(u)
+#     target_vel = u[1] + sqrt(v1.velocity[1]^2 + v1.velocity[2]^2)
+#     steering_angle = u[2]
+#     println(u)
+#     # println(steering_angle)
+#     cmd = (steering_angle, target_vel, true)
+#     serialize(socket, cmd)
+#     if stop_sign==0
+#         sleep(2.0)
+#     end
+# end
+# end
+# end
+
 function decision_making(vehicle_channel, 
     gt_channel, 
     perception_state_channel, 
     map, 
     target_segment_channel, 
     socket)
-# do some setup
-flag = 0
-println("motion start")
-# println(map)
-route_flag = 1
-segments = []   
-vehicle_id = 0
-get_vehicle = 0
 
-while true
-    # sleep(0.2)
-    if get_vehicle == 0
-        vehicle_id = fetch(vehicle_channel)
-        get_vehicle =1
-    end
-    latest_localization_state = take!(gt_channel)
-    while latest_localization_state.vehicle_id!=vehicle_id
+    println("Motion started")
+    flag = 0
+    route_flag = 1
+    segments = []   
+    vehicle_id = fetch(vehicle_channel) 
+
+    while true
         latest_localization_state = take!(gt_channel)
-    end
-    println("v id")
-    println(latest_localization_state.vehicle_id)
-
-    # println("gt")
-    # println(latest_localization_state)
-    # latest_perception_state = fetch(perception_state_channel)
-    latest_perception_state = []
-    # println("target1")
-    target_segment = fetch(target_segment_channel)
-    # println(target_segment)
-    current_segment = []
-    v1 = latest_localization_state
-    println(v1)
-    front_position = calculate_front_position(latest_localization_state.position[1], latest_localization_state.position[2], quaternion_to_angle_z(latest_localization_state.orientation), latest_localization_state.size[1])
-    car_position = [front_position[1], front_position[2], 0]
-    for map_segment in map
-        if is_inside_segment(car_position, map_segment[2])
-            # println(map_segment[1])
-            push!(current_segment, map_segment[2])
+        while latest_localization_state.vehicle_id != vehicle_id
+            latest_localization_state = take!(gt_channel)
         end
 
-    end
-    if length(current_segment) == 0 
-        println("Error: car not inside a segment")
-    end
+        println("Vehicle ID: ", latest_localization_state.vehicle_id)
 
-    target_segment_id = target_segment.id
-    println("target_segment")
-    println(target_segment_id)
-    if has_passed_halfway(v1.position, target_segment.lane_boundaries[2].pt_a, target_segment.lane_boundaries[3].pt_b)
-        println("reached")
-        cmd = (0.0, 0.0, true)
-        serialize(socket, cmd)
-        segments= []
-        now_target = take!(target_segment_channel)
-        route_flag = 1
-        sleep(5.0) 
-    else
+        latest_perception_state = fetch(perception_state_channel)  
         target_segment = fetch(target_segment_channel)
-        target_segment_id = target_segment.id
-        println("target_segment")
-        println(target_segment_id)
-    # try
-    if route_flag == 1
-        start_segment_id = current_segment[1].id
-        # println("start_segment")
-        # println(current_segment[1].id)
-        # println(current_segment[1])
-    now_segments = get_route(map, start_segment_id, target_segment_id)
-    # println(now_segments)
-    segments = now_segments
-    route_flag = 0
-    end
-# catch e
-#     println(e)
-# end
-    # println(segments)
-    # segments = []
-    # push!(segments, map[32])
-    # push!(segments, map[30])
-    # push!(segments, map[28])
-    # push!(segments, map[26])
-    # push!(segments, map[24])
-    # push!(segments, map[17])
-    # push!(segments, map[14])
 
-    # println(segments)
-    if length(latest_perception_state)==0
-        v2 = MyPerceptionType(
-            0.0,                        # time
-            0,                          # vehicle_id
-            SVector{3, Float64}(0.0, 0.0, 0.0), # position
-            SVector{4, Float64}(0.0, 0.0, 0.0, 0.0), # orientation (quaternion)
-            SVector{3, Float64}(Inf, Inf, 0.0), # velocity
-            0.0,                        # steering_angle
-            SVector{3, Float64}(0.0, 0.0, 0.0)  # size
-        )
-        v3 = MyPerceptionType(
-            0.0,                        # time
-            0,                          # vehicle_id
-            SVector{3, Float64}(0.0, 0.0, 0.0), # position
-            SVector{4, Float64}(0.0, 0.0, 0.0, 0.0), # orientation (quaternion)
-            SVector{3, Float64}(Inf, Inf, 0.0), # velocity
-            0.0,                        # steering_angle
-            SVector{3, Float64}(0.0, 0.0, 0.0)  # size
-        )
-    elseif length(latest_perception_state)==0       
-        v2 = MyPerceptionType(
-            0.0,                        # time
-            0,                          # vehicle_id
-            SVector{3, Float64}(0.0, 0.0, 0.0), # position
-            SVector{4, Float64}(0.0, 0.0, 0.0, 0.0), # orientation (quaternion)
-            SVector{3, Float64}(Inf, Inf, 0.0), # velocity
-            0.0,                        # steering_angle
-            SVector{3, Float64}(0.0, 0.0, 0.0)  # size
-        )
-        v3 = latest_perception_state[1]
-    else   
-        dists = [Inf; [norm(v.position[1:2]-latest_localization_state.position[1:2]) for v in latest_perception_state]]
-        closest = partialsortperm(dists, 1:2)
-        v2 = latest_perception_state[closest[1]]
-        v3 = latest_perception_state[closest[2]]
-    end
-    # max_vel = Inf
-    # for segment in segments
-    #     if segment.speed_limit <= max_vel
-    #         max_vel = segment.speed_limit
-    #     end
-    # end
-    max_vel = 2.5
-    # println("cnm")
-    if length(current_segment) > 0
+        current_segment = []
+        front_position = calculate_front_position(latest_localization_state.position[1], latest_localization_state.position[2], quaternion_to_angle_z(latest_localization_state.orientation), latest_localization_state.size[1])
+        car_position = [front_position[1], front_position[2], 0]
 
-    stop_sign, flag = should_stop(car_position, current_segment[1], flag; speed = max_vel, timestamp = 0.4)
-    max_vel =  stop_sign==1 ? max_vel : 0
-    end
+        for map_segment in map
+            if is_inside_segment(car_position, map_segment[2])
+                push!(current_segment, map_segment[2])
+            end
+        end
 
-    # println("max_vel")
-    # println(max_vel)
-    # my_segments = []
-    # try
-        my_segments = get_lane_segments(segments, 3)
-        # println("my road")
-        # println(my_segments)
-    # catch e
-    #     println("1")
-    #     println(e)
-    # end
-    # try
-    u = pure_pursuit(v1, v2, v3, my_segments; ls = 2.0, max_vel = max_vel, timestamp = 0.2)
-    # catch e   
-    #     println("2") 
-    #     println(e)
-    # end
-    # figure out what to do ... setup motion planning problem etc
-    # println(u)
-    target_vel = u[1] + sqrt(v1.velocity[1]^2 + v1.velocity[2]^2)
-    steering_angle = u[2]
-    println(u)
-    # println(steering_angle)
-    cmd = (steering_angle, target_vel, true)
-    serialize(socket, cmd)
-    if stop_sign==0
-        sleep(2.0)
+        if isempty(current_segment)
+            println("Error: car not inside a segment")
+        end
+
+        if has_passed_halfway(latest_localization_state.position, target_segment.lane_boundaries[2].pt_a, target_segment.lane_boundaries[3].pt_b)
+            println("Target segment reached")
+            cmd = (0.0, 0.0, true)
+            serialize(socket, cmd)
+            route_flag = 1
+            sleep(5.0) 
+        else
+            if route_flag == 1
+                start_segment_id = current_segment[1].id
+                segments = get_route(map, start_segment_id, target_segment.id)
+                route_flag = 0
+            end
+
+            if isempty(latest_perception_state)
+                v2 = v3 = create_default_perception()  # Function to create a default perception when data is not available
+            else
+                dists = [norm(v.position[1:2] - latest_localization_state.position[1:2]) for v in latest_perception_state]
+                closest = sortperm(dists)[1:2]
+                v2 = latest_perception_state[closest[1]]
+                v3 = latest_perception_state[closest[2]]
+            end
+
+            max_vel = 2.5
+            if !isempty(current_segment)
+                stop_sign, flag = should_stop(car_position, current_segment[1], flag; speed = max_vel, timestamp = 0.4)
+                max_vel = stop_sign == 1 ? max_vel : 0
+            end
+
+            my_segments = get_lane_segments(segments, 3)
+
+            u = pure_pursuit(v1, v2, v3, my_segments; ls = 2.0, max_vel = max_vel, timestamp = 0.2)
+            target_vel = u[1] + sqrt(latest_localization_state.velocity[1]^2 + latest_localization_state.velocity[2]^2)
+            steering_angle = u[2]
+            
+            cmd = (steering_angle, target_vel, true)
+            serialize(socket, cmd)
+
+            if stop_sign == 0
+                sleep(2.0)
+            end
+        end
     end
-end
-end
 end
 
 
@@ -1810,7 +1892,7 @@ function my_client(host::IPAddr=IPv4(0), port=4444)
     end)
 
     # @async localize(gps_channel, imu_channel, localization_state_channel)
-    # @async perception(cam_channel, localization_state_channel, perception_state_channel)
+    @async perception(cam_channel, localization_state_channel, perception_state_channel)
     # @async decision_making(localization_state_channel, perception_state_channel, map, target_segment_channel. socket)
     @async decision_making(vehicle_channel, gt_channel, perception_state_channel, map_segments, target_segment_channel, socket)
 end
