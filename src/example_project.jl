@@ -1247,12 +1247,13 @@ function pure_pursuit(v1, v2, v3, segments; ls = 2.0, max_vel = 10.0, timestamp 
         predict_x2 = constant_velocity_prediction(center_x2, timestamp, u2)
         predict_x3 = constant_velocity_prediction(center_x3, timestamp, u3)
         alpha = 0.5
-        while collision_constraint(predict_x1, predict_x2, v1.size, v2.size)<0 && u[1]+v>0.0 && is_ahead(v1.position[1:2], x1[4],v2.position[1:2], x2[4])==0
+        while collision_constraint(predict_x1, predict_x2, v1.size, v2.size)<0 && u[1]+v>0.0 && is_ahead(v1.position[1:2], x1[4],v2.position[1:2], x2[4])==1
+            println("is not ahead")
             println("reduce")
             u[1] -= alpha
             predict_x1 = constant_velocity_prediction(center_x1, timestamp, u)
         end
-        while collision_constraint(predict_x1, predict_x3, v1.size, v3.size)<0 && u[1]+v>0.0 &&is_ahead(v1.position[1:2], x1[4],v3.position[1:2], x3[4])==0
+        while collision_constraint(predict_x1, predict_x3, v1.size, v3.size)<0 && u[1]+v>0.0 && is_ahead(v1.position[1:2], x1[4],v3.position[1:2], x3[4])==1
             u[1] -= alpha
             predict_x1 = constant_velocity_prediction(center_x1, timestamp, u)
         end
