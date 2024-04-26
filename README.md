@@ -15,4 +15,11 @@ julia --project --threads=auto
 pkg> up VehicleSim  # if new fixes have been pushed to VehicleSim, restart Julia
 #press backspace to quit pkg mode  
 using Revise, Sockets, livelineAVStack  
-livelineAVStack.keyboard_client(ip"")  #enter your ip
+livelineAVStack.my_client(ip"")  #enter your ip
+
+# Evaluate perception part:  
+cd livelineAVStack  
+git pull  
+julia --project --threads=auto  
+using Revise, Sockets, livelineAVStack  
+livelineAVStack.keyboard_client_eval_perception(ip"")  #enter your ip
